@@ -1,4 +1,5 @@
 import { useSimulationStore, scenarios } from '../stores/simulationStore';
+import { useEnvironmentStore, type EnvironmentType } from '../stores/environmentStore';
 import { solveLanding } from '../simulation/GFoldSolver';
 
 export function ControlPanel() {
@@ -17,10 +18,20 @@ export function ControlPanel() {
     setErrorMessage,
     showTrajectory,
     showThrustVectors,
+    showGlideslopeCone,
     toggleTrajectory,
     toggleThrustVectors,
+    toggleGlideslopeCone,
     reset,
   } = useSimulationStore();
+
+  const { environmentType, setEnvironmentType } = useEnvironmentStore();
+
+  const environmentOptions: { value: EnvironmentType; label: string }[] = [
+    { value: 'droneShip', label: 'Drone Ship (Ocean)' },
+    { value: 'rtls', label: 'RTLS (Land)' },
+    { value: 'mars', label: 'Mars Surface' },
+  ];
 
   const handleSolve = async () => {
     setStatus('solving');
@@ -39,19 +50,24 @@ export function ControlPanel() {
   const handlePlay = () => setStatus('playing');
   const handlePause = () => setStatus('paused');
   const handleReset = () => reset();
+  const handleLaunch = () => {
+    reset();
+    setStatus('launching');
+  };
 
   const maxTime = trajectory ? trajectory.positions.length - 1 : params.K;
 
-  const statusConfig = {
+  const statusConfig: Record<string, { label: string; dot: string }> = {
     idle: { label: 'STANDBY', dot: 'status-warning' },
+    launching: { label: 'LAUNCHING', dot: 'status-active' },
     solving: { label: 'COMPUTING', dot: 'status-active' },
     ready: { label: 'READY', dot: 'status-nominal' },
-    playing: { label: 'ACTIVE', dot: 'status-active' },
+    playing: { label: 'DESCENT', dot: 'status-active' },
     paused: { label: 'PAUSED', dot: 'status-warning' },
     error: { label: 'ERROR', dot: 'status-error' },
   };
 
-  const currentStatus = statusConfig[status];
+  const currentStatus = statusConfig[status] || statusConfig.idle;
 
   return (
     <div className="absolute top-4 left-4 w-80">
@@ -90,6 +106,22 @@ export function ControlPanel() {
             {scenarios.map((s, i) => (
               <option key={s.name} value={i}>
                 {s.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Environment Selection */}
+        <div>
+          <label className="data-label block mb-2">Landing Environment</label>
+          <select
+            className="mission-select w-full rounded px-3 py-2 text-sm"
+            value={environmentType}
+            onChange={(e) => setEnvironmentType(e.target.value as EnvironmentType)}
+          >
+            {environmentOptions.map((env) => (
+              <option key={env.value} value={env.value}>
+                {env.label}
               </option>
             ))}
           </select>
@@ -150,35 +182,22 @@ export function ControlPanel() {
           </div>
         </div>
 
-        {/* Solve Button */}
+        {/* Launch Button */}
+        <button
+          onClick={handleLaunch}
+          disabled={status === 'launching' || status === 'solving'}
+          className="mission-btn w-full rounded py-3 text-sm bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-500 hover:to-red-500 text-white font-bold tracking-wider"
+        >
+          {status === 'launching' ? 'LAUNCHING...' : 'LAUNCH MISSION'}
+        </button>
+
+        {/* Solve Button (direct landing) */}
         <button
           onClick={handleSolve}
-          disabled={status === 'solving'}
-          className="mission-btn mission-btn-primary w-full rounded py-3 text-sm"
+          disabled={status === 'solving' || status === 'launching'}
+          className="mission-btn w-full rounded py-2 text-xs opacity-70 hover:opacity-100"
         >
-          {status === 'solving' ? (
-            <span className="flex items-center justify-center gap-2">
-              <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                <circle
-                  className="opacity-25"
-                  cx="12"
-                  cy="12"
-                  r="10"
-                  stroke="currentColor"
-                  strokeWidth="4"
-                  fill="none"
-                />
-                <path
-                  className="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                />
-              </svg>
-              Computing Trajectory
-            </span>
-          ) : (
-            'Compute Trajectory'
-          )}
+          {status === 'solving' ? 'Computing...' : 'Skip to Landing Only'}
         </button>
 
         {/* Playback Controls */}
@@ -262,6 +281,14 @@ export function ControlPanel() {
                 onChange={toggleThrustVectors}
               />
               Thrust Vectors
+            </label>
+            <label className="flex items-center gap-3 text-xs text-amber-500/70 cursor-pointer hover:text-amber-500 transition-colors">
+              <input
+                type="checkbox"
+                checked={showGlideslopeCone}
+                onChange={toggleGlideslopeCone}
+              />
+              Glide Slope Cone
             </label>
           </div>
         </div>

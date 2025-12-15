@@ -7,6 +7,7 @@ export interface LandingParams {
   m: number;         // Rocket mass (kg)
   F_max: number;     // Maximum thrust (N)
   P_min: number;     // Minimum altitude (m)
+  alpha: number;     // Glide slope angle (radians)
   p0: [number, number, number];      // Initial position [x, y, z]
   v0: [number, number, number];      // Initial velocity [vx, vy, vz]
   p_target: [number, number, number]; // Landing pad position
@@ -19,7 +20,7 @@ export interface TrajectoryData {
   fuelUsed: number;
 }
 
-export type SimulationStatus = 'idle' | 'solving' | 'ready' | 'playing' | 'paused' | 'error';
+export type SimulationStatus = 'idle' | 'solving' | 'ready' | 'playing' | 'paused' | 'error' | 'launching';
 
 export interface Scenario {
   name: string;
@@ -28,7 +29,37 @@ export interface Scenario {
 
 export const scenarios: Scenario[] = [
   {
-    name: 'Falcon 9 RTLS',
+    name: 'Mars Starship',
+    params: {
+      K: 60,
+      h: 1.0,
+      g: 3.72,
+      m: 120000,
+      F_max: 2000000,
+      P_min: 0,
+      alpha: Math.PI / 30, // ~6 degrees
+      p0: [400, 150, 1200],
+      v0: [-40, -15, -60],
+      p_target: [0, 0, 0],
+    },
+  },
+  {
+    name: 'Mars Lander',
+    params: {
+      K: 50,
+      h: 1.0,
+      g: 3.72,
+      m: 2000,
+      F_max: 30000,
+      P_min: 0,
+      alpha: Math.PI / 25, // ~7 degrees
+      p0: [300, 100, 800],
+      v0: [-30, -10, -50],
+      p_target: [0, 0, 0],
+    },
+  },
+  {
+    name: 'Falcon 9 Earth',
     params: {
       K: 50,
       h: 1.0,
@@ -36,36 +67,9 @@ export const scenarios: Scenario[] = [
       m: 25000,
       F_max: 800000,
       P_min: 0,
+      alpha: Math.PI / 20, // ~9 degrees
       p0: [500, 200, 1000],
       v0: [-50, -20, -80],
-      p_target: [0, 0, 0],
-    },
-  },
-  {
-    name: 'Mars Lander',
-    params: {
-      K: 60,
-      h: 1.0,
-      g: 3.72,
-      m: 2000,
-      F_max: 30000,
-      P_min: 0,
-      p0: [300, 100, 800],
-      v0: [-30, -10, -50],
-      p_target: [0, 0, 0],
-    },
-  },
-  {
-    name: 'Lunar Lander',
-    params: {
-      K: 80,
-      h: 1.0,
-      g: 1.62,
-      m: 5000,
-      F_max: 40000,
-      P_min: 0,
-      p0: [200, 50, 500],
-      v0: [-20, -5, -30],
       p_target: [0, 0, 0],
     },
   },
@@ -92,6 +96,18 @@ interface SimulationState {
   setPlaybackTime: (time: number) => void;
   playbackSpeed: number;
   setPlaybackSpeed: (speed: number) => void;
+
+  // Launch state
+  launchTime: number;
+  setLaunchTime: (time: number) => void;
+  launchPosition: [number, number, number];
+  launchVelocity: [number, number, number];
+  launchThrust: number;
+  setLaunchState: (state: {
+    position?: [number, number, number];
+    velocity?: [number, number, number];
+    thrust?: number;
+  }) => void;
 
   // Visualization toggles
   showTrajectory: boolean;
@@ -131,6 +147,18 @@ export const useSimulationStore = create<SimulationState>((set) => ({
   playbackSpeed: 1,
   setPlaybackSpeed: (speed) => set({ playbackSpeed: speed }),
 
+  // Launch state
+  launchTime: -5,
+  setLaunchTime: (time) => set({ launchTime: time }),
+  launchPosition: [0, 0, 5],
+  launchVelocity: [0, 0, 0],
+  launchThrust: 0,
+  setLaunchState: (state) => set((prev) => ({
+    launchPosition: state.position ?? prev.launchPosition,
+    launchVelocity: state.velocity ?? prev.launchVelocity,
+    launchThrust: state.thrust ?? prev.launchThrust,
+  })),
+
   // Visualization
   showTrajectory: true,
   showThrustVectors: true,
@@ -146,5 +174,9 @@ export const useSimulationStore = create<SimulationState>((set) => ({
       status: 'idle',
       playbackTime: 0,
       errorMessage: null,
+      launchTime: -5,
+      launchPosition: [0, 0, 5],
+      launchVelocity: [0, 0, 0],
+      launchThrust: 0,
     }),
 }));

@@ -46,7 +46,8 @@ function App() {
   }, [status, playbackTime, playbackSpeed, trajectory, setPlaybackTime, setStatus]);
 
   return (
-    <div className="w-full h-full bg-black">
+    <div className="w-full h-full bg-[#050608] hex-grid scanlines relative">
+      {/* 3D Canvas */}
       <Canvas
         shadows
         camera={{
@@ -60,22 +61,64 @@ function App() {
         <Scene />
       </Canvas>
 
+      {/* UI Overlays */}
       <ControlPanel />
       <Telemetry />
 
-      {/* Title overlay */}
+      {/* Title Header */}
       <div className="absolute top-4 right-4 text-right">
-        <h1 className="text-2xl font-bold text-white/80">cvxkerb-js</h1>
-        <p className="text-sm text-gray-400">G-FOLD Powered Descent Guidance</p>
-        <p className="text-xs text-gray-500 mt-1">Powered by cvxjs</p>
+        <div className="mission-panel rounded-lg px-5 py-4">
+          <div className="corner-decoration corner-tl" />
+          <div className="corner-decoration corner-tr" />
+          <div className="corner-decoration corner-bl" />
+          <div className="corner-decoration corner-br" />
+
+          <h1 className="header-display text-xl glow-amber tracking-wider">
+            CVXKERB-JS
+          </h1>
+          <div className="h-px bg-gradient-to-r from-transparent via-amber-500/30 to-transparent my-2" />
+          <p className="text-[10px] text-amber-500/50 tracking-[0.2em] uppercase">
+            Fuel-Optimal Landing Guidance
+          </p>
+          <p className="text-[9px] text-cyan-500/40 mt-1 tracking-wider">
+            Powered by <span className="text-cyan-500/60">cvxjs</span> SOCP Solver
+          </p>
+        </div>
+      </div>
+
+      {/* Mission Clock */}
+      <div className="absolute top-4 left-1/2 -translate-x-1/2">
+        <div className="mission-panel rounded-lg px-6 py-2 flex items-center gap-4">
+          <span className="text-[9px] text-amber-500/40 uppercase tracking-wider">
+            Mission Time
+          </span>
+          <span className="header-display text-lg glow-amber tabular-nums">
+            T{playbackTime >= 0 ? '+' : ''}{playbackTime.toFixed(1)}
+          </span>
+        </div>
       </div>
 
       {/* Error display */}
       {status === 'error' && (
-        <div className="absolute bottom-4 right-4 bg-red-900/80 text-red-200 px-4 py-2 rounded">
-          {useSimulationStore.getState().errorMessage}
+        <div className="absolute bottom-4 right-4 mission-panel rounded-lg px-4 py-3 border-red-500/50">
+          <div className="flex items-center gap-2">
+            <div className="status-dot status-error" />
+            <span className="text-red-400 text-sm">
+              {useSimulationStore.getState().errorMessage}
+            </span>
+          </div>
         </div>
       )}
+
+      {/* Bottom credits */}
+      <div className="absolute bottom-4 right-4 text-right opacity-40 hover:opacity-70 transition-opacity">
+        <p className="text-[9px] text-amber-500/50 tracking-wider">
+          G-FOLD Algorithm • SpaceX-inspired
+        </p>
+        <p className="text-[8px] text-amber-500/30 mt-0.5">
+          Convex Optimization for Powered Descent
+        </p>
+      </div>
     </div>
   );
 }

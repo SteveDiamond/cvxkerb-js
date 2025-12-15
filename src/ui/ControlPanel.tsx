@@ -36,174 +36,247 @@ export function ControlPanel() {
     }
   };
 
-  const handlePlay = () => {
-    setStatus('playing');
-  };
-
-  const handlePause = () => {
-    setStatus('paused');
-  };
-
-  const handleReset = () => {
-    reset();
-  };
+  const handlePlay = () => setStatus('playing');
+  const handlePause = () => setStatus('paused');
+  const handleReset = () => reset();
 
   const maxTime = trajectory ? trajectory.positions.length - 1 : params.K;
 
+  const statusConfig = {
+    idle: { label: 'STANDBY', dot: 'status-warning' },
+    solving: { label: 'COMPUTING', dot: 'status-active' },
+    ready: { label: 'READY', dot: 'status-nominal' },
+    playing: { label: 'ACTIVE', dot: 'status-active' },
+    paused: { label: 'PAUSED', dot: 'status-warning' },
+    error: { label: 'ERROR', dot: 'status-error' },
+  };
+
+  const currentStatus = statusConfig[status];
+
   return (
-    <div className="absolute top-4 left-4 bg-black/80 backdrop-blur-sm rounded-lg p-4 text-white w-72 space-y-4">
-      <h2 className="text-lg font-bold text-orange-400">G-FOLD Rocket Landing</h2>
+    <div className="absolute top-4 left-4 w-80">
+      {/* Main Control Panel */}
+      <div className="mission-panel rounded-lg p-5 space-y-5">
+        {/* Corner decorations */}
+        <div className="corner-decoration corner-tl" />
+        <div className="corner-decoration corner-tr" />
+        <div className="corner-decoration corner-bl" />
+        <div className="corner-decoration corner-br" />
 
-      {/* Scenario selection */}
-      <div>
-        <label className="block text-sm text-gray-400 mb-1">Scenario</label>
-        <select
-          className="w-full bg-gray-800 rounded px-2 py-1 text-sm"
-          value={scenarios.findIndex((s) => s.params === params)}
-          onChange={(e) => loadScenario(scenarios[parseInt(e.target.value)])}
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="header-display text-lg glow-amber">G-FOLD</h2>
+            <p className="text-[10px] text-amber-500/50 tracking-widest">
+              POWERED DESCENT GUIDANCE
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className={`status-dot ${currentStatus.dot}`} />
+            <span className="text-xs text-amber-500/70">{currentStatus.label}</span>
+          </div>
+        </div>
+
+        {/* Scenario Selection */}
+        <div>
+          <label className="data-label block mb-2">Mission Profile</label>
+          <select
+            className="mission-select w-full rounded px-3 py-2 text-sm"
+            value={scenarios.findIndex((s) => s.name === scenarios.find(sc =>
+              sc.params.g === params.g && sc.params.m === params.m
+            )?.name)}
+            onChange={(e) => loadScenario(scenarios[parseInt(e.target.value)])}
+          >
+            {scenarios.map((s, i) => (
+              <option key={s.name} value={i}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Parameters Grid */}
+        <div>
+          <label className="data-label block mb-2">Vehicle Parameters</label>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <span className="text-[9px] text-amber-500/40 uppercase tracking-wider">
+                Gravity (m/s²)
+              </span>
+              <input
+                type="number"
+                value={params.g}
+                onChange={(e) => setParams({ g: parseFloat(e.target.value) })}
+                className="mission-input w-full rounded px-2 py-1 text-sm mt-1"
+                step="0.1"
+              />
+            </div>
+            <div>
+              <span className="text-[9px] text-amber-500/40 uppercase tracking-wider">
+                Mass (kg)
+              </span>
+              <input
+                type="number"
+                value={params.m}
+                onChange={(e) => setParams({ m: parseFloat(e.target.value) })}
+                className="mission-input w-full rounded px-2 py-1 text-sm mt-1"
+                step="100"
+              />
+            </div>
+            <div>
+              <span className="text-[9px] text-amber-500/40 uppercase tracking-wider">
+                Max Thrust (N)
+              </span>
+              <input
+                type="number"
+                value={params.F_max}
+                onChange={(e) => setParams({ F_max: parseFloat(e.target.value) })}
+                className="mission-input w-full rounded px-2 py-1 text-sm mt-1"
+                step="10000"
+              />
+            </div>
+            <div>
+              <span className="text-[9px] text-amber-500/40 uppercase tracking-wider">
+                Time Steps
+              </span>
+              <input
+                type="number"
+                value={params.K}
+                onChange={(e) => setParams({ K: parseInt(e.target.value) })}
+                className="mission-input w-full rounded px-2 py-1 text-sm mt-1"
+                step="5"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Solve Button */}
+        <button
+          onClick={handleSolve}
+          disabled={status === 'solving'}
+          className="mission-btn mission-btn-primary w-full rounded py-3 text-sm"
         >
-          {scenarios.map((s, i) => (
-            <option key={s.name} value={i}>
-              {s.name}
-            </option>
-          ))}
-        </select>
-      </div>
+          {status === 'solving' ? (
+            <span className="flex items-center justify-center gap-2">
+              <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                <circle
+                  className="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                  fill="none"
+                />
+                <path
+                  className="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                />
+              </svg>
+              Computing Trajectory
+            </span>
+          ) : (
+            'Compute Trajectory'
+          )}
+        </button>
 
-      {/* Parameters */}
-      <div className="space-y-2">
-        <label className="block text-sm text-gray-400">Parameters</label>
-        <div className="grid grid-cols-2 gap-2 text-xs">
-          <div>
-            <span className="text-gray-500">Gravity:</span>
-            <input
-              type="number"
-              value={params.g}
-              onChange={(e) => setParams({ g: parseFloat(e.target.value) })}
-              className="w-16 bg-gray-800 rounded px-1 ml-1"
-              step="0.1"
-            />
-          </div>
-          <div>
-            <span className="text-gray-500">Mass:</span>
-            <input
-              type="number"
-              value={params.m}
-              onChange={(e) => setParams({ m: parseFloat(e.target.value) })}
-              className="w-16 bg-gray-800 rounded px-1 ml-1"
-              step="100"
-            />
-          </div>
-          <div>
-            <span className="text-gray-500">F_max:</span>
-            <input
-              type="number"
-              value={params.F_max}
-              onChange={(e) => setParams({ F_max: parseFloat(e.target.value) })}
-              className="w-16 bg-gray-800 rounded px-1 ml-1"
-              step="10000"
-            />
-          </div>
-          <div>
-            <span className="text-gray-500">Steps:</span>
-            <input
-              type="number"
-              value={params.K}
-              onChange={(e) => setParams({ K: parseInt(e.target.value) })}
-              className="w-16 bg-gray-800 rounded px-1 ml-1"
-              step="5"
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Solve button */}
-      <button
-        onClick={handleSolve}
-        disabled={status === 'solving'}
-        className="w-full bg-orange-600 hover:bg-orange-500 disabled:bg-gray-600 rounded py-2 font-semibold transition-colors"
-      >
-        {status === 'solving' ? 'Solving...' : 'Solve Trajectory'}
-      </button>
-
-      {/* Playback controls */}
-      {trajectory && (
-        <div className="space-y-2">
-          <div className="flex gap-2">
-            <button
-              onClick={status === 'playing' ? handlePause : handlePlay}
-              className="flex-1 bg-blue-600 hover:bg-blue-500 rounded py-1 text-sm"
-            >
-              {status === 'playing' ? 'Pause' : 'Play'}
-            </button>
-            <button
-              onClick={handleReset}
-              className="flex-1 bg-gray-600 hover:bg-gray-500 rounded py-1 text-sm"
-            >
-              Reset
-            </button>
-          </div>
-
-          {/* Time slider */}
-          <div>
-            <label className="text-xs text-gray-400">
-              Time: {playbackTime.toFixed(1)}s / {maxTime}s
-            </label>
-            <input
-              type="range"
-              min={0}
-              max={maxTime}
-              step={0.1}
-              value={playbackTime}
-              onChange={(e) => setPlaybackTime(parseFloat(e.target.value))}
-              className="w-full"
-            />
-          </div>
-
-          {/* Speed control */}
-          <div>
-            <label className="text-xs text-gray-400">Speed: {playbackSpeed}x</label>
-            <input
-              type="range"
-              min={0.1}
-              max={5}
-              step={0.1}
-              value={playbackSpeed}
-              onChange={(e) => setPlaybackSpeed(parseFloat(e.target.value))}
-              className="w-full"
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Visualization toggles */}
-      <div className="space-y-1">
-        <label className="block text-sm text-gray-400">Display</label>
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={showTrajectory}
-            onChange={toggleTrajectory}
-            className="rounded"
-          />
-          Trajectory Path
-        </label>
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={showThrustVectors}
-            onChange={toggleThrustVectors}
-            className="rounded"
-          />
-          Thrust Vectors
-        </label>
-      </div>
-
-      {/* Status */}
-      <div className="text-xs text-gray-500">
-        Status: <span className={status === 'error' ? 'text-red-400' : 'text-green-400'}>{status}</span>
+        {/* Playback Controls */}
         {trajectory && (
-          <div>Fuel used: {trajectory.fuelUsed.toFixed(0)} N·s</div>
+          <div className="space-y-4 pt-2 border-t border-amber-500/10">
+            <div className="flex gap-2">
+              <button
+                onClick={status === 'playing' ? handlePause : handlePlay}
+                className="mission-btn flex-1 rounded py-2 text-xs"
+              >
+                {status === 'playing' ? '❚❚ Pause' : '▶ Play'}
+              </button>
+              <button
+                onClick={handleReset}
+                className="mission-btn flex-1 rounded py-2 text-xs"
+              >
+                ↺ Reset
+              </button>
+            </div>
+
+            {/* Timeline */}
+            <div>
+              <div className="flex justify-between mb-1">
+                <span className="text-[9px] text-amber-500/40 uppercase tracking-wider">
+                  Mission Time
+                </span>
+                <span className="data-value text-xs glow-amber">
+                  T+{playbackTime.toFixed(1)}s
+                </span>
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={maxTime}
+                step={0.1}
+                value={playbackTime}
+                onChange={(e) => setPlaybackTime(parseFloat(e.target.value))}
+                className="w-full"
+              />
+            </div>
+
+            {/* Speed */}
+            <div>
+              <div className="flex justify-between mb-1">
+                <span className="text-[9px] text-amber-500/40 uppercase tracking-wider">
+                  Playback Speed
+                </span>
+                <span className="data-value text-xs text-cyan-400">
+                  {playbackSpeed}x
+                </span>
+              </div>
+              <input
+                type="range"
+                min={0.1}
+                max={5}
+                step={0.1}
+                value={playbackSpeed}
+                onChange={(e) => setPlaybackSpeed(parseFloat(e.target.value))}
+                className="w-full"
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Display Options */}
+        <div className="pt-2 border-t border-amber-500/10">
+          <label className="data-label block mb-2">Display Layers</label>
+          <div className="space-y-2">
+            <label className="flex items-center gap-3 text-xs text-amber-500/70 cursor-pointer hover:text-amber-500 transition-colors">
+              <input
+                type="checkbox"
+                checked={showTrajectory}
+                onChange={toggleTrajectory}
+              />
+              Trajectory Path
+            </label>
+            <label className="flex items-center gap-3 text-xs text-amber-500/70 cursor-pointer hover:text-amber-500 transition-colors">
+              <input
+                type="checkbox"
+                checked={showThrustVectors}
+                onChange={toggleThrustVectors}
+              />
+              Thrust Vectors
+            </label>
+          </div>
+        </div>
+
+        {/* Fuel Usage */}
+        {trajectory && (
+          <div className="pt-2 border-t border-amber-500/10">
+            <div className="flex justify-between items-baseline">
+              <span className="data-label">Fuel Consumption</span>
+              <span className="data-value text-lg glow-cyan">
+                {(trajectory.fuelUsed / 1000).toFixed(1)}
+                <span className="text-xs text-cyan-500/50 ml-1">kN·s</span>
+              </span>
+            </div>
+          </div>
         )}
       </div>
     </div>

@@ -4,8 +4,8 @@ import {
   add,
   sub,
   mul,
-  norm2,
   vstack,
+  sum,
   eq,
   ge,
   le,
@@ -58,6 +58,10 @@ export async function solveLanding(params: LandingParams): Promise<TrajectoryDat
   const Fy: Expr[] = Array.from({ length: K }, () => variable(1));
   const Fz: Expr[] = Array.from({ length: K }, () => variable(1));
 
+  // Auxiliary variables for thrust magnitudes (to make objective DCP)
+  // gamma[k] >= ||F[k]||_2 via SOC constraint
+  const gamma: Expr[] = Array.from({ length: K }, () => variable(1));
+
   const constraints: Constraint[] = [];
 
   // === BOUNDARY CONDITIONS ===
@@ -107,17 +111,22 @@ export async function solveLanding(params: LandingParams): Promise<TrajectoryDat
   for (let k = 0; k < K; k++) {
     // Upward thrust: Fz[k] >= 0
     constraints.push(ge(Fz[k], 0));
-    // Thrust magnitude: ||F[k]||_2 <= F_max (SOCP!)
-    // Stack [Fx, Fy, Fz] into a vector for norm2
-    const F_vec = vstack([Fx[k], Fy[k], Fz[k]]);
-    constraints.push(soc(F_vec, F_max));
+
+    // gamma[k] >= 0
+    constraints.push(ge(gamma[k], 0));
+
+    // Thrust magnitude via SOC: ||F[k]||_2 <= gamma[k]
+    // This makes gamma[k] an upper bound on thrust magnitude
+    const F_vec = vstack(Fx[k], Fy[k], Fz[k]);
+    constraints.push(soc(F_vec, gamma[k]));
+
+    // Also enforce max thrust: gamma[k] <= F_max
+    constraints.push(le(gamma[k], F_max));
   }
 
-  // === OBJECTIVE: Minimize fuel (sum of thrust magnitudes) ===
-  let fuelCost: Expr = norm2(vstack([Fx[0], Fy[0], Fz[0]]));
-  for (let k = 1; k < K; k++) {
-    fuelCost = add(fuelCost, norm2(vstack([Fx[k], Fy[k], Fz[k]])));
-  }
+  // === OBJECTIVE: Minimize fuel (sum of thrust magnitude upper bounds) ===
+  // sum(gamma) is affine, so definitely convex!
+  const fuelCost = sum(vstack(...gamma));
 
   const solution = await Problem.minimize(fuelCost)
     .subjectTo(constraints)

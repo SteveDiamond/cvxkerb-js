@@ -9,6 +9,8 @@ interface TrajectoryProps {
 
 export function Trajectory({ positions, currentIndex }: TrajectoryProps) {
   // Create gradient colors based on progress
+  // Note: positions are in physics coords [x, y, z] where z = altitude
+  // Convert to Three.js coords where y = up by swapping y/z
   const { pastPoints, futurePoints, pastColors, futureColors } = useMemo(() => {
     const past: THREE.Vector3[] = [];
     const future: THREE.Vector3[] = [];
@@ -16,7 +18,8 @@ export function Trajectory({ positions, currentIndex }: TrajectoryProps) {
     const futureCols: THREE.Color[] = [];
 
     for (let i = 0; i < positions.length; i++) {
-      const point = new THREE.Vector3(...positions[i]);
+      // Swap y and z: physics [x, y, z] -> Three.js [x, z, y]
+      const point = new THREE.Vector3(positions[i][0], positions[i][2], positions[i][1]);
       const progress = i / (positions.length - 1);
 
       if (i <= currentIndex) {
@@ -73,8 +76,9 @@ export function Trajectory({ positions, currentIndex }: TrajectoryProps) {
       {positions.map((pos, i) => {
         if (i % 5 !== 0) return null; // Only show every 5th marker
         const isPast = i <= currentIndex;
+        // Swap y and z for Three.js coords
         return (
-          <mesh key={i} position={pos}>
+          <mesh key={i} position={[pos[0], pos[2], pos[1]]}>
             <sphereGeometry args={[1.5, 8, 8]} />
             <meshBasicMaterial
               color={isPast ? '#ff6600' : '#66ccff'}

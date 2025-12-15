@@ -4,12 +4,14 @@ import * as THREE from 'three';
 
 // Mars terrain configuration
 const TERRAIN_CONFIG = {
-  width: 3000,
-  height: 3000,
+  width: 6000,
+  height: 6000,
   widthSegments: 256,
   heightSegments: 256,
   verticalScale: 100,     // Full Mars terrain detail
   flatCenterRadius: 50,   // Just the landing pad is flat
+  edgeCurlStart: 2200,    // Distance from center where curl begins
+  edgeCurlStrength: 150,  // How much terrain curls down at edges
 };
 
 export function MarsTerrain() {
@@ -101,6 +103,15 @@ export function MarsTerrain() {
                       (TERRAIN_CONFIG.flatCenterRadius * 1.5);
         const smoothBlend = blend * blend * (3 - 2 * blend);
         height *= smoothBlend;
+      }
+
+      // Edge curl - terrain dips down at edges to hide boundaries
+      const maxDist = TERRAIN_CONFIG.width / 2;
+      if (distFromCenter > TERRAIN_CONFIG.edgeCurlStart) {
+        const curlProgress = (distFromCenter - TERRAIN_CONFIG.edgeCurlStart) /
+                            (maxDist - TERRAIN_CONFIG.edgeCurlStart);
+        const smoothCurl = curlProgress * curlProgress; // Quadratic falloff
+        height -= smoothCurl * TERRAIN_CONFIG.edgeCurlStrength;
       }
 
       positions[i * 3 + 2] = height;
@@ -202,37 +213,45 @@ function LandingTarget() {
 }
 
 function MarsAtmosphere() {
+
   return (
     <group>
-      {/* Main sunlight */}
+      {/* Main sunlight - the Sun as seen from Mars */}
       <directionalLight
-        position={[400, 500, 300]}
-        intensity={1.8}
-        color="#ffe4c4"
+        position={[3000, 2000, 2000]}
+        intensity={2.5}
+        color="#fff8f0"
         castShadow
         shadow-mapSize-width={4096}
         shadow-mapSize-height={4096}
-        shadow-camera-far={3000}
-        shadow-camera-left={-800}
-        shadow-camera-right={800}
-        shadow-camera-top={800}
-        shadow-camera-bottom={-800}
+        shadow-camera-far={5000}
+        shadow-camera-left={-1500}
+        shadow-camera-right={1500}
+        shadow-camera-top={1500}
+        shadow-camera-bottom={-1500}
       />
 
-      {/* Ambient light with Mars dust tint */}
-      <ambientLight intensity={0.4} color="#e8a878" />
-
-      {/* Hemisphere light for atmosphere scatter */}
-      <hemisphereLight color="#ffd4a8" groundColor="#8b4513" intensity={0.5} />
-
-      {/* Mars sky dome */}
-      <mesh>
-        <sphereGeometry args={[2800, 64, 64]} />
-        <meshBasicMaterial color="#c9956c" side={THREE.BackSide} />
+      {/* Sun disc - smaller, more distant appearance from Mars */}
+      <mesh position={[3000, 2000, 2000]}>
+        <sphereGeometry args={[15, 32, 32]} />
+        <meshBasicMaterial color="#fffef8" />
       </mesh>
 
-      {/* Dust haze */}
-      <fog attach="fog" args={['#c9956c', 500, 2500]} />
+      {/* Ambient light - brighter for rocket visibility */}
+      <ambientLight intensity={0.6} color="#ffeedd" />
+
+      {/* Fill light from opposite side to reduce harsh shadows on rocket */}
+      <directionalLight
+        position={[-1500, 800, -1000]}
+        intensity={0.8}
+        color="#ffddcc"
+      />
+
+      {/* Hemisphere light for atmosphere scatter */}
+      <hemisphereLight color="#443322" groundColor="#8b4513" intensity={0.5} />
+
+      {/* Sky background set via scene.background in App.tsx */}
+
     </group>
   );
 }

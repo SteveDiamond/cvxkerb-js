@@ -140,6 +140,12 @@ export function CameraController({
       currentLookAtRef.current.lerp(config.lookAt, 0.1);
     }
 
+    // Prevent camera from going below ground
+    const minCameraHeight = 10;
+    if (currentPosRef.current.y < minCameraHeight) {
+      currentPosRef.current.y = minCameraHeight;
+    }
+
     // Apply to camera
     cameraRef.current.position.copy(currentPosRef.current);
     cameraRef.current.lookAt(currentLookAtRef.current);
@@ -156,7 +162,7 @@ export function CameraController({
       makeDefault
       fov={60}
       near={1}
-      far={10000}
+      far={8000}
       position={[500, 300, 800]}
     />
   );

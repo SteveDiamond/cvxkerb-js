@@ -18,6 +18,7 @@ export function ThrustVectors({ positions, thrusts, currentIndex }: ThrustVector
     return max || 1;
   }, [thrusts]);
 
+  // Convert physics coords [x, y, z] (z=altitude) to Three.js [x, y, z] (y=up)
   const arrows = useMemo(() => {
     const result: {
       start: [number, number, number];
@@ -36,15 +37,19 @@ export function ThrustVectors({ positions, thrusts, currentIndex }: ThrustVector
       if (magnitude < 0.001) continue;
 
       // Normalize and scale for visualization
+      // Swap y/z for Three.js coordinate system
       const scale = (magnitude / maxThrust) * 50;
-      const dir = new THREE.Vector3(thrust[0], thrust[1], thrust[2]).normalize();
+      const dir = new THREE.Vector3(thrust[0], thrust[2], thrust[1]).normalize();
+
+      // Start position with swapped coords
+      const startPos: [number, number, number] = [pos[0], pos[2], pos[1]];
 
       result.push({
-        start: pos,
+        start: startPos,
         end: [
-          pos[0] + dir.x * scale,
-          pos[1] + dir.y * scale,
-          pos[2] + dir.z * scale,
+          startPos[0] + dir.x * scale,
+          startPos[1] + dir.y * scale,
+          startPos[2] + dir.z * scale,
         ],
         isPast: i <= currentIndex,
         magnitude,

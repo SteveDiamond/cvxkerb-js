@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { Scene } from './components/Scene';
 import { ControlPanel } from './ui/ControlPanel';
@@ -7,25 +7,16 @@ import { CameraSwitcher } from './ui/CameraSwitcher';
 import { MarsLocationOverlay } from './ui/MarsLocationOverlay';
 import { useSimulationStore } from './stores/simulationStore';
 import { useCameraStore, type CameraMode } from './stores/cameraStore';
-import { solveLanding } from './simulation/GFoldSolver';
 import { stepPhysics } from './simulation/PhysicsEngine';
 
 function App() {
   const {
     status,
-    params,
     playbackTime,
     playbackSpeed,
     trajectory,
-    launchTime,
-    launchPosition,
-    launchVelocity,
     setPlaybackTime,
     setStatus,
-    setLaunchTime,
-    setLaunchState,
-    setTrajectory,
-    setErrorMessage,
     // Simple physics mode
     simulationMode,
     simplePhysics,
@@ -59,108 +50,14 @@ function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [startTransition]);
 
-  // Trigger G-FOLD solver and transition to landing
-  const triggerLanding = useCallback(async () => {
-    setStatus('solving');
-
-    // Create landing params from current launch state
-    const landingParams = {
-      ...params,
-      p0: launchPosition,
-      v0: launchVelocity,
-    };
-
-    try {
-      const result = await solveLanding(landingParams);
-      setTrajectory(result);
-      setStatus('playing');
-      setPlaybackTime(0);
-    } catch (err) {
-      setStatus('error');
-      setErrorMessage(err instanceof Error ? err.message : 'Solver failed');
-    }
-  }, [params, launchPosition, launchVelocity, setStatus, setTrajectory, setPlaybackTime, setErrorMessage]);
-
-  // Launch phase animation
-  useEffect(() => {
-    if (status !== 'launching') return;
-
-    let animationId: number;
-    const gravity = params.g;
-    const mass = params.m;
-    const maxThrust = params.F_max;
-
-    const animate = (currentTime: number) => {
-      if (lastTimeRef.current === 0) {
-        lastTimeRef.current = currentTime;
-      }
-
-      const deltaTime = (currentTime - lastTimeRef.current) / 1000;
-      lastTimeRef.current = currentTime;
-
-      const newLaunchTime = launchTime + deltaTime * playbackSpeed;
-      setLaunchTime(newLaunchTime);
-
-      // Simple launch physics
-      let thrust = 0;
-      let [px, py, pz] = launchPosition;
-      let [vx, vy, vz] = launchVelocity;
-
-      if (newLaunchTime < 0) {
-        // Countdown - engines starting
-        thrust = newLaunchTime > -2 ? 0.3 : 0;
-      } else if (newLaunchTime < 30) {
-        // Ascent phase - full thrust, slight pitch over
-        thrust = 1.0;
-        const thrustAccel = (thrust * maxThrust) / mass;
-
-        // Gravity turn - gradually pitch over
-        const pitchAngle = Math.min(newLaunchTime * 0.02, 0.8); // Max ~45 deg
-        const thrustZ = Math.cos(pitchAngle) * thrustAccel;
-        const thrustX = Math.sin(pitchAngle) * thrustAccel * 0.5;
-
-        vz += (thrustZ - gravity) * deltaTime;
-        vx += thrustX * deltaTime;
-
-        pz += vz * deltaTime;
-        px += vx * deltaTime;
-      } else if (newLaunchTime < 35) {
-        // Coast / MECO
-        thrust = 0;
-        vz -= gravity * deltaTime;
-        pz += vz * deltaTime;
-        px += vx * deltaTime;
-      } else {
-        // Trigger landing sequence
-        setLaunchState({ position: [px, py, pz], velocity: [vx, vy, vz], thrust: 0 });
-        triggerLanding();
-        return;
-      }
-
-      // Keep above ground
-      if (pz < 5) {
-        pz = 5;
-        vz = Math.max(0, vz);
-      }
-
-      setLaunchState({ position: [px, py, pz], velocity: [vx, vy, vz], thrust });
-      animationId = requestAnimationFrame(animate);
-    };
-
-    animationId = requestAnimationFrame(animate);
-
-    return () => {
-      cancelAnimationFrame(animationId);
-      lastTimeRef.current = 0;
-    };
-  }, [status, launchTime, launchPosition, launchVelocity, params, playbackSpeed, setLaunchTime, setLaunchState, triggerLanding]);
-
-  // Landing playback animation
+  // Landing playback animation with crash detection
   useEffect(() => {
     if (status !== 'playing' || !trajectory) return;
 
     let animationId: number;
     const maxTime = trajectory.positions.length - 1;
+    const SAFE_LANDING_VELOCITY = 10; // m/s - above this is a crash
+    const GROUND_ALTITUDE = 30; // Check crash when below this altitude
 
     const animate = (currentTime: number) => {
       if (lastTimeRef.current === 0) {
@@ -171,10 +68,34 @@ function App() {
       lastTimeRef.current = currentTime;
 
       const newTime = playbackTime + deltaTime * playbackSpeed;
+      const currentIndex = Math.floor(newTime);
+
+      // Check for crash: if near ground with high velocity
+      if (currentIndex < trajectory.positions.length && currentIndex < trajectory.velocities.length) {
+        const pos = trajectory.positions[currentIndex];
+        const vel = trajectory.velocities[currentIndex];
+        const altitude = pos[2]; // z is altitude in physics coords
+        const verticalVelocity = Math.abs(vel[2]);
+        const totalVelocity = Math.sqrt(vel[0] ** 2 + vel[1] ** 2 + vel[2] ** 2);
+
+        // Crash if low altitude and high velocity
+        if (altitude < GROUND_ALTITUDE && totalVelocity > SAFE_LANDING_VELOCITY) {
+          setPlaybackTime(newTime);
+          setStatus('crashed');
+          return;
+        }
+      }
 
       if (newTime >= maxTime) {
+        // Final check: did we land safely?
+        const finalVel = trajectory.velocities[trajectory.velocities.length - 1];
+        const finalSpeed = Math.sqrt(finalVel[0] ** 2 + finalVel[1] ** 2 + finalVel[2] ** 2);
+        if (finalSpeed > SAFE_LANDING_VELOCITY) {
+          setStatus('crashed');
+        } else {
+          setStatus('landed');
+        }
         setPlaybackTime(maxTime);
-        setStatus('paused');
       } else {
         setPlaybackTime(newTime);
         animationId = requestAnimationFrame(animate);
@@ -230,7 +151,7 @@ function App() {
   // Get display time for mission clock
   const displayTime = simulationMode === 'simple'
     ? simplePhysics.elapsedTime
-    : status === 'launching' ? launchTime : playbackTime + (trajectory ? 35 : 0);
+    : playbackTime;
 
   return (
     <div className="w-full h-full bg-[#050608] hex-grid scanlines relative">
@@ -241,7 +162,7 @@ function App() {
           position: [500, 300, 800],
           fov: 60,
           near: 1,
-          far: 5000,
+          far: 8000,
         }}
         gl={{ antialias: true }}
       >
@@ -251,7 +172,8 @@ function App() {
       {/* UI Overlays */}
       <ControlPanel />
       <Telemetry />
-      <CameraSwitcher />
+      {/* Camera switcher hidden - use mouse to rotate view */}
+      {/* <CameraSwitcher /> */}
       <MarsLocationOverlay />
 
       {/* Title Header */}
@@ -290,17 +212,6 @@ function App() {
       </div>
 
       {/* Phase indicator */}
-      {status === 'launching' && (
-        <div className="absolute top-20 left-1/2 -translate-x-1/2">
-          <div className="mission-panel rounded px-4 py-1">
-            <span className="text-xs text-cyan-400 uppercase tracking-wider">
-              {launchTime < 0 ? 'Countdown' : launchTime < 30 ? 'Ascent' : 'MECO'}
-            </span>
-          </div>
-        </div>
-      )}
-
-      {/* Simple physics phase indicator */}
       {(status === 'simpleRunning' || status === 'crashed' || status === 'landed') && simulationMode === 'simple' && (
         <div className="absolute top-20 left-1/2 -translate-x-1/2">
           <div className="mission-panel rounded px-4 py-1">

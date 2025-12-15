@@ -48,8 +48,9 @@ export function ControlPanel() {
     try {
       const result = await solveLanding(params);
       setTrajectory(result);
-      setStatus('ready');
       setPlaybackTime(0);
+      setStatus('playing');  // Auto-play immediately
+      startTransition('chase');  // Switch to chase camera for drama
     } catch (err) {
       setStatus('error');
       setErrorMessage(err instanceof Error ? err.message : 'Unknown error');
@@ -59,10 +60,6 @@ export function ControlPanel() {
   const handlePlay = () => setStatus('playing');
   const handlePause = () => setStatus('paused');
   const handleReset = () => reset();
-  const handleLaunch = () => {
-    reset();
-    setStatus('launching');
-  };
 
   // Simple physics handlers
   const handleSimpleLaunch = () => {
@@ -80,7 +77,6 @@ export function ControlPanel() {
 
   const statusConfig: Record<string, { label: string; dot: string }> = {
     idle: { label: 'STANDBY', dot: 'status-warning' },
-    launching: { label: 'LAUNCHING', dot: 'status-active' },
     solving: { label: 'COMPUTING', dot: 'status-active' },
     ready: { label: 'READY', dot: 'status-nominal' },
     playing: { label: 'DESCENT', dot: 'status-active' },
@@ -120,34 +116,7 @@ export function ControlPanel() {
           </div>
         </div>
 
-        {/* Mode Selector */}
-        <div>
-          <label className="data-label block mb-2">Simulation Mode</label>
-          <div className="flex gap-2">
-            <button
-              onClick={() => { handleSimpleReset(); setSimulationMode('simple'); }}
-              className={`flex-1 rounded py-2 text-xs transition-all ${
-                simulationMode === 'simple'
-                  ? 'bg-cyan-600 text-white'
-                  : 'mission-btn opacity-60 hover:opacity-100'
-              }`}
-            >
-              Simple Physics
-            </button>
-            <button
-              onClick={() => { handleReset(); setSimulationMode('gfold'); }}
-              className={`flex-1 rounded py-2 text-xs transition-all ${
-                simulationMode === 'gfold'
-                  ? 'bg-amber-600 text-white'
-                  : 'mission-btn opacity-60 hover:opacity-100'
-              }`}
-            >
-              G-FOLD Landing
-            </button>
-          </div>
-        </div>
-
-        {/* Simple Physics Controls */}
+        {/* G-FOLD Controls (Simple Physics mode hidden for now) */}
         {simulationMode === 'simple' && (
           <>
             {/* Environment Selection */}
@@ -356,22 +325,13 @@ export function ControlPanel() {
               </div>
             </div>
 
-            {/* Launch Button */}
-            <button
-              onClick={handleLaunch}
-              disabled={status === 'launching' || status === 'solving'}
-              className="mission-btn w-full rounded py-3 text-sm bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-500 hover:to-red-500 text-white font-bold tracking-wider"
-            >
-              {status === 'launching' ? 'LAUNCHING...' : 'LAUNCH MISSION'}
-            </button>
-
-            {/* Solve Button (direct landing) */}
+            {/* Begin Descent Button */}
             <button
               onClick={handleSolve}
-              disabled={status === 'solving' || status === 'launching'}
-              className="mission-btn w-full rounded py-2 text-xs opacity-70 hover:opacity-100"
+              disabled={status === 'solving'}
+              className="mission-btn w-full rounded py-3 text-sm bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-500 hover:to-red-500 text-white font-bold tracking-wider"
             >
-              {status === 'solving' ? 'Computing...' : 'Skip to Landing Only'}
+              {status === 'solving' ? 'COMPUTING TRAJECTORY...' : 'BEGIN DESCENT'}
             </button>
 
             {/* Playback Controls */}

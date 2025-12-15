@@ -6,13 +6,13 @@ import * as THREE from 'three';
 interface RocketProps {
   position: [number, number, number];
   thrust: [number, number, number];
-  velocity?: [number, number, number];
+  velocity: [number, number, number];
 }
 
 // Preload the model
 useGLTF.preload('/models/starship.glb');
 
-export function Rocket({ position, thrust }: RocketProps) {
+export function Rocket({ position, thrust, velocity }: RocketProps) {
   const groupRef = useRef<THREE.Group>(null);
   const flameRef = useRef<THREE.Mesh>(null);
   const innerFlameRef = useRef<THREE.Mesh>(null);
@@ -37,11 +37,18 @@ export function Rocket({ position, thrust }: RocketProps) {
     const center = bbox.getCenter(new THREE.Vector3());
     cloned.position.sub(center);
 
-    // Enable shadows on all meshes
+    // Apply Starship-like stainless steel material to all meshes
     cloned.traverse((child) => {
       if (child instanceof THREE.Mesh) {
         child.castShadow = true;
         child.receiveShadow = true;
+        // Darker matte finish
+        child.material = new THREE.MeshStandardMaterial({
+          color: '#606060',      // Darker gray
+          metalness: 0.2,        // Less metallic
+          roughness: 0.75,       // Matte finish
+          envMapIntensity: 0.3,  // Reduced reflections
+        });
       }
     });
 
@@ -56,19 +63,52 @@ export function Rocket({ position, thrust }: RocketProps) {
   const thrustRatio = Math.min(thrustMagnitude / maxThrust, 1);
   const flameScale = thrustRatio * 3 + 0.5;
 
-  // Point rocket in thrust direction
-  const thrustDir = useMemo(() => {
-    if (thrustMagnitude < 0.001) return new THREE.Vector3(0, 1, 0);
-    return new THREE.Vector3(thrust[0], thrust[1], thrust[2]).normalize();
-  }, [thrust, thrustMagnitude]);
+  // Rocket orientation logic:
+  // - During powered descent, the rocket points in the thrust direction
+  //   (thrust vector points where engines push the rocket, so nose aligns with thrust)
+  // - The orientation should be smooth and physically plausible
 
-  useFrame((state) => {
+  const targetQuaternion = useRef(new THREE.Quaternion());
+  const currentQuaternion = useRef(new THREE.Quaternion());
+  const lastThrustDir = useRef(new THREE.Vector3(0, 1, 0));
+
+  useFrame((state, delta) => {
     if (groupRef.current) {
-      // Align rocket's Y-axis with thrust direction
       const up = new THREE.Vector3(0, 1, 0);
-      const quaternion = new THREE.Quaternion();
-      quaternion.setFromUnitVectors(up, thrustDir);
-      groupRef.current.quaternion.copy(quaternion);
+      let targetDir: THREE.Vector3;
+
+      // Minimum thrust threshold for powered flight (small enough to catch low thrust)
+      const minThrustThreshold = 5000; // N
+
+      if (thrustMagnitude > minThrustThreshold) {
+        // Powered flight: point nose in thrust direction
+        targetDir = new THREE.Vector3(thrust[0], thrust[1], thrust[2]).normalize();
+        lastThrustDir.current.copy(targetDir);
+      } else {
+        // Coast/freefall: maintain last thrust orientation (realistic in vacuum/thin atmosphere)
+        const velocityMag = Math.sqrt(
+          velocity[0] ** 2 + velocity[1] ** 2 + velocity[2] ** 2
+        );
+
+        if (velocityMag > 5 && lastThrustDir.current.length() > 0.5) {
+          // Moving and had previous thrust direction - maintain it
+          targetDir = lastThrustDir.current.clone();
+        } else {
+          // At rest or no previous thrust - point up
+          targetDir = up.clone();
+        }
+      }
+
+      // Calculate target quaternion
+      targetQuaternion.current.setFromUnitVectors(up, targetDir);
+
+      // Smooth interpolation with different rates for thrust vs coast
+      currentQuaternion.current.copy(groupRef.current.quaternion);
+      const lerpFactor = thrustMagnitude > minThrustThreshold
+        ? Math.min(delta * 5, 1)    // Active thrust control - responsive
+        : Math.min(delta * 0.5, 1); // Coast phase - slow drift
+      currentQuaternion.current.slerp(targetQuaternion.current, lerpFactor);
+      groupRef.current.quaternion.copy(currentQuaternion.current);
     }
 
     // Animate flame flicker
@@ -92,6 +132,10 @@ export function Rocket({ position, thrust }: RocketProps) {
 
   return (
     <group ref={groupRef} position={position}>
+      {/* Local lighting to ensure rocket is visible */}
+      <pointLight position={[30, 20, 30]} intensity={1.5} color="#fff8f0" distance={200} />
+      <pointLight position={[-30, 20, -30]} intensity={1.0} color="#ffeedd" distance={200} />
+
       {/* Starship Model */}
       <primitive object={model} />
 

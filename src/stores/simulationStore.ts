@@ -21,7 +21,7 @@ export interface TrajectoryData {
   fuelUsed: number;
 }
 
-export type SimulationStatus = 'idle' | 'solving' | 'ready' | 'playing' | 'paused' | 'error' | 'launching' | 'simpleRunning' | 'crashed' | 'landed';
+export type SimulationStatus = 'idle' | 'solving' | 'ready' | 'playing' | 'paused' | 'error' | 'simpleRunning' | 'crashed' | 'landed';
 
 export type SimulationMode = 'gfold' | 'simple';
 
@@ -34,45 +34,45 @@ export const scenarios: Scenario[] = [
   {
     name: 'Mars Starship',
     params: {
-      K: 60,
+      K: 35,           // Shorter, more dramatic
       h: 1.0,
       g: 3.72,
       m: 120000,
-      F_max: 2000000,
+      F_max: 2200000,  // Slightly more thrust for aggressive maneuver
       P_min: 0,
-      alpha: Math.PI / 30, // ~6 degrees
-      p0: [400, 150, 1200],
-      v0: [-40, -15, -60],
+      alpha: Math.PI / 30,
+      p0: [600, 100, 1500],      // Higher, offset
+      v0: [-80, -20, -120],      // Coming in HOT - 145 m/s total
       p_target: [0, 0, 0],
     },
   },
   {
-    name: 'Mars Lander',
+    name: 'Steep Dive',
     params: {
-      K: 50,
+      K: 30,
       h: 1.0,
       g: 3.72,
-      m: 2000,
-      F_max: 30000,
+      m: 120000,
+      F_max: 2500000,
       P_min: 0,
-      alpha: Math.PI / 25, // ~7 degrees
-      p0: [300, 100, 800],
-      v0: [-30, -10, -50],
+      alpha: Math.PI / 25,
+      p0: [200, 50, 2000],       // Very high, almost above pad
+      v0: [-30, -10, -180],      // Screaming downward
       p_target: [0, 0, 0],
     },
   },
   {
-    name: 'Falcon 9 Earth',
+    name: 'Falcon 9 RTLS',
     params: {
-      K: 50,
+      K: 40,
       h: 1.0,
       g: 9.81,
       m: 25000,
-      F_max: 800000,
+      F_max: 850000,
       P_min: 0,
-      alpha: Math.PI / 20, // ~9 degrees
-      p0: [500, 200, 1000],
-      v0: [-50, -20, -80],
+      alpha: Math.PI / 20,
+      p0: [800, 150, 1200],
+      v0: [-100, -30, -100],     // Fast approach
       p_target: [0, 0, 0],
     },
   },
@@ -110,18 +110,6 @@ interface SimulationState {
   playbackSpeed: number;
   setPlaybackSpeed: (speed: number) => void;
 
-  // Launch state
-  launchTime: number;
-  setLaunchTime: (time: number) => void;
-  launchPosition: [number, number, number];
-  launchVelocity: [number, number, number];
-  launchThrust: number;
-  setLaunchState: (state: {
-    position?: [number, number, number];
-    velocity?: [number, number, number];
-    thrust?: number;
-  }) => void;
-
   // Visualization toggles
   showTrajectory: boolean;
   showThrustVectors: boolean;
@@ -144,8 +132,8 @@ const defaultSimpleConfig: PhysicsConfig = {
 };
 
 export const useSimulationStore = create<SimulationState>((set) => ({
-  // Simulation mode
-  simulationMode: 'simple',
+  // Simulation mode - default to G-FOLD
+  simulationMode: 'gfold',
   setSimulationMode: (mode) => set({ simulationMode: mode, status: 'idle' }),
 
   // Simple physics state
@@ -175,20 +163,8 @@ export const useSimulationStore = create<SimulationState>((set) => ({
   // Playback
   playbackTime: 0,
   setPlaybackTime: (time) => set({ playbackTime: time }),
-  playbackSpeed: 1,
+  playbackSpeed: 2,  // Default 2x speed for more dramatic playback
   setPlaybackSpeed: (speed) => set({ playbackSpeed: speed }),
-
-  // Launch state
-  launchTime: -5,
-  setLaunchTime: (time) => set({ launchTime: time }),
-  launchPosition: [0, 0, 25],
-  launchVelocity: [0, 0, 0],
-  launchThrust: 0,
-  setLaunchState: (state) => set((prev) => ({
-    launchPosition: state.position ?? prev.launchPosition,
-    launchVelocity: state.velocity ?? prev.launchVelocity,
-    launchThrust: state.thrust ?? prev.launchThrust,
-  })),
 
   // Visualization
   showTrajectory: true,
@@ -205,10 +181,6 @@ export const useSimulationStore = create<SimulationState>((set) => ({
       status: 'idle',
       playbackTime: 0,
       errorMessage: null,
-      launchTime: -5,
-      launchPosition: [0, 0, 25],
-      launchVelocity: [0, 0, 0],
-      launchThrust: 0,
       simplePhysics: createInitialState(),
     }),
 }));

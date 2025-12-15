@@ -95,49 +95,57 @@ export function Rocket({ position, thrust }: RocketProps) {
       {/* Starship Model */}
       <primitive object={model} />
 
-      {/* Engine exhaust - procedural flames */}
+      {/* Raptor Engine Exhaust - realistic methalox plume */}
       {thrustMagnitude > 0.001 && (
         <group position={[0, flameYOffset, 0]}>
-          {/* Outer flame - orange */}
-          <mesh ref={flameRef} scale={flameScale}>
-            <coneGeometry args={[2.5, 10, 16]} />
-            <meshBasicMaterial color="#ff5500" transparent opacity={0.85} />
-          </mesh>
-
-          {/* Middle flame - yellow */}
-          <mesh ref={innerFlameRef} scale={flameScale * 0.7}>
-            <coneGeometry args={[1.8, 8, 16]} />
-            <meshBasicMaterial color="#ffaa00" transparent opacity={0.9} />
-          </mesh>
-
-          {/* Inner core - white hot */}
-          <mesh scale={flameScale * 0.4}>
-            <coneGeometry args={[1, 5, 16]} />
-            <meshBasicMaterial color="#ffffcc" transparent opacity={0.95} />
-          </mesh>
-
-          {/* Mach diamonds effect */}
-          {[0, 1, 2].map((i) => (
+          {/* Shock diamonds - the bright spots in supersonic exhaust */}
+          {[0, 1, 2, 3, 4].map((i) => (
             <mesh
-              key={i}
-              position={[0, -(3 + i * 2.5) * flameScale * 0.3, 0]}
-              scale={flameScale * (0.4 - i * 0.1)}
+              key={`diamond-${i}`}
+              position={[0, -(2 + i * 3) * flameScale * 0.4, 0]}
+              scale={flameScale * Math.max(0.15, 0.5 - i * 0.08)}
             >
-              <octahedronGeometry args={[0.8, 0]} />
+              <octahedronGeometry args={[1.2, 0]} />
               <meshBasicMaterial
-                color="#ffffff"
+                color={i < 2 ? '#ffffff' : '#aaccff'}
                 transparent
-                opacity={0.7 - i * 0.2}
+                opacity={Math.max(0.1, 0.9 - i * 0.18)}
               />
             </mesh>
           ))}
 
-          {/* Exhaust glow */}
+          {/* Inner core - white hot near nozzle */}
+          <mesh scale={[flameScale * 0.5, flameScale * 0.8, flameScale * 0.5]}>
+            <cylinderGeometry args={[0.8, 1.5, 6, 16]} />
+            <meshBasicMaterial color="#ffffff" transparent opacity={0.95} />
+          </mesh>
+
+          {/* Primary plume - blue-white (methalox burns blue) */}
+          <mesh ref={innerFlameRef} scale={[flameScale * 0.6, flameScale, flameScale * 0.6]}>
+            <cylinderGeometry args={[1.2, 2.5, 12, 16]} />
+            <meshBasicMaterial color="#99ccff" transparent opacity={0.7} />
+          </mesh>
+
+          {/* Outer expansion - faint blue glow */}
+          <mesh ref={flameRef} scale={[flameScale * 0.8, flameScale * 1.2, flameScale * 0.8]}>
+            <cylinderGeometry args={[2, 4, 18, 16]} />
+            <meshBasicMaterial color="#6699cc" transparent opacity={0.3} />
+          </mesh>
+
+          {/* Exhaust glow light - blue tinted for methalox */}
           <pointLight
-            position={[0, -5, 0]}
-            intensity={thrustRatio * 2}
-            color="#ff6600"
-            distance={100}
+            position={[0, -8, 0]}
+            intensity={thrustRatio * 3}
+            color="#99bbff"
+            distance={150}
+          />
+
+          {/* Secondary warm glow from engine bell */}
+          <pointLight
+            position={[0, 2, 0]}
+            intensity={thrustRatio * 1.5}
+            color="#ffaa66"
+            distance={50}
           />
         </group>
       )}

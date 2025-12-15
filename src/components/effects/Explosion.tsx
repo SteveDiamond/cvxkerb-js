@@ -10,102 +10,139 @@ interface ExplosionProps {
 export function Explosion({ position, impactVelocity = 50 }: ExplosionProps) {
   const groupRef = useRef<THREE.Group>(null);
   const fireballRef = useRef<THREE.Mesh>(null);
-  const coreRef = useRef<THREE.Mesh>(null);
-  const pointsRef = useRef<THREE.Points>(null);
+  const shockwaveRef = useRef<THREE.Mesh>(null);
+  const debrisRef = useRef<THREE.Points>(null);
+  const sparkRef = useRef<THREE.Points>(null);
   const startTime = useRef(Date.now());
 
   // Scale explosion based on impact velocity
-  const explosionScale = Math.min(1 + impactVelocity / 100, 3);
+  const explosionScale = Math.min(1 + impactVelocity / 50, 4);
 
-  // Particle system for debris
-  const particleCount = 300;
-  const { positions, velocities, colors } = useMemo(() => {
-    const positions = new Float32Array(particleCount * 3);
+  // Debris particles - chunks flying outward
+  const debrisCount = 200;
+  const { debrisPositions, debrisVelocities, debrisSizes } = useMemo(() => {
+    const positions = new Float32Array(debrisCount * 3);
     const velocities: [number, number, number][] = [];
-    const colors = new Float32Array(particleCount * 3);
+    const sizes = new Float32Array(debrisCount);
 
-    for (let i = 0; i < particleCount; i++) {
-      // Start at explosion center
+    for (let i = 0; i < debrisCount; i++) {
+      positions[i * 3] = (Math.random() - 0.5) * 5;
+      positions[i * 3 + 1] = Math.random() * 3;
+      positions[i * 3 + 2] = (Math.random() - 0.5) * 5;
+
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.random() * Math.PI * 0.6;
+      const speed = (20 + Math.random() * 60) * explosionScale;
+      velocities.push([
+        Math.sin(phi) * Math.cos(theta) * speed,
+        Math.cos(phi) * speed + 15,
+        Math.sin(phi) * Math.sin(theta) * speed,
+      ]);
+
+      sizes[i] = 2 + Math.random() * 4;
+    }
+
+    return { debrisPositions: positions, debrisVelocities: velocities, debrisSizes: sizes };
+  }, [explosionScale]);
+
+  // Sparks - small bright particles
+  const sparkCount = 500;
+  const { sparkPositions, sparkVelocities } = useMemo(() => {
+    const positions = new Float32Array(sparkCount * 3);
+    const velocities: [number, number, number][] = [];
+
+    for (let i = 0; i < sparkCount; i++) {
       positions[i * 3] = 0;
       positions[i * 3 + 1] = 0;
       positions[i * 3 + 2] = 0;
 
-      // Random outward velocity
       const theta = Math.random() * Math.PI * 2;
-      const phi = Math.random() * Math.PI * 0.8; // Bias upward
-      const speed = (30 + Math.random() * 80) * explosionScale;
+      const phi = Math.random() * Math.PI;
+      const speed = (40 + Math.random() * 100) * explosionScale;
       velocities.push([
         Math.sin(phi) * Math.cos(theta) * speed,
+        Math.abs(Math.cos(phi)) * speed * 0.8 + 20,
         Math.sin(phi) * Math.sin(theta) * speed,
-        Math.cos(phi) * speed * 0.7 + 20, // Bias upward
       ]);
-
-      // Orange/red/yellow colors
-      const colorChoice = Math.random();
-      if (colorChoice < 0.4) {
-        // Orange
-        colors[i * 3] = 1;
-        colors[i * 3 + 1] = 0.4;
-        colors[i * 3 + 2] = 0;
-      } else if (colorChoice < 0.7) {
-        // Red
-        colors[i * 3] = 1;
-        colors[i * 3 + 1] = 0.1;
-        colors[i * 3 + 2] = 0;
-      } else {
-        // Yellow
-        colors[i * 3] = 1;
-        colors[i * 3 + 1] = 0.8;
-        colors[i * 3 + 2] = 0.2;
-      }
     }
 
-    return { positions, velocities, colors };
+    return { sparkPositions: positions, sparkVelocities: velocities };
   }, [explosionScale]);
 
   useFrame(() => {
     const elapsed = (Date.now() - startTime.current) / 1000;
 
-    // Expand and fade fireball
+    // Fireball - rapid expansion then fade
     if (fireballRef.current) {
-      const scale = Math.min(elapsed * 40 * explosionScale, 30 * explosionScale);
+      const fireballPhase = Math.min(elapsed * 3, 1);
+      const scale = fireballPhase * 25 * explosionScale;
       fireballRef.current.scale.setScalar(scale);
-      (fireballRef.current.material as THREE.MeshBasicMaterial).opacity = Math.max(0, 1 - elapsed / 2);
+
+      const mat = fireballRef.current.material as THREE.MeshBasicMaterial;
+      mat.opacity = Math.max(0, (1 - elapsed / 1.5) * 0.9);
+
+      // Color shift from white -> orange -> red -> dark
+      if (elapsed < 0.3) {
+        mat.color.setHex(0xffffaa);
+      } else if (elapsed < 0.8) {
+        mat.color.setHex(0xff6600);
+      } else {
+        mat.color.setHex(0x441100);
+      }
     }
 
-    // Core shrinks faster
-    if (coreRef.current) {
-      const scale = Math.max(0, (1 - elapsed * 2) * 15 * explosionScale);
-      coreRef.current.scale.setScalar(scale);
-      (coreRef.current.material as THREE.MeshBasicMaterial).opacity = Math.max(0, 1 - elapsed);
+    // Shockwave ring expanding outward
+    if (shockwaveRef.current) {
+      const shockScale = elapsed * 80 * explosionScale;
+      shockwaveRef.current.scale.set(shockScale, shockScale, 1);
+      const mat = shockwaveRef.current.material as THREE.MeshBasicMaterial;
+      mat.opacity = Math.max(0, 0.6 - elapsed * 0.8);
     }
 
-    // Update debris particles
-    if (pointsRef.current) {
-      const posArray = pointsRef.current.geometry.attributes.position.array as Float32Array;
+    // Update debris
+    if (debrisRef.current) {
+      const posArray = debrisRef.current.geometry.attributes.position.array as Float32Array;
 
-      for (let i = 0; i < particleCount; i++) {
-        // Update position
-        posArray[i * 3] += velocities[i][0] * 0.016;
-        posArray[i * 3 + 1] += velocities[i][1] * 0.016;
-        posArray[i * 3 + 2] += velocities[i][2] * 0.016;
+      for (let i = 0; i < debrisCount; i++) {
+        posArray[i * 3] += debrisVelocities[i][0] * 0.016;
+        posArray[i * 3 + 1] += debrisVelocities[i][1] * 0.016;
+        posArray[i * 3 + 2] += debrisVelocities[i][2] * 0.016;
 
-        // Apply gravity
-        velocities[i][2] -= 3.72 * 0.016;
+        // Gravity
+        debrisVelocities[i][1] -= 9.8 * 0.016;
 
-        // Ground collision
-        if (posArray[i * 3 + 2] < 0) {
-          posArray[i * 3 + 2] = 0;
-          velocities[i][2] *= -0.3; // Bounce with damping
-          velocities[i][0] *= 0.8;
-          velocities[i][1] *= 0.8;
+        // Ground collision with bounce
+        if (posArray[i * 3 + 1] < 0) {
+          posArray[i * 3 + 1] = 0;
+          debrisVelocities[i][1] *= -0.3;
+          debrisVelocities[i][0] *= 0.7;
+          debrisVelocities[i][2] *= 0.7;
         }
       }
 
-      pointsRef.current.geometry.attributes.position.needsUpdate = true;
+      debrisRef.current.geometry.attributes.position.needsUpdate = true;
+      const mat = debrisRef.current.material as THREE.PointsMaterial;
+      mat.opacity = Math.max(0, 1 - elapsed / 5);
+    }
 
-      // Fade particles
-      (pointsRef.current.material as THREE.PointsMaterial).opacity = Math.max(0, 1 - elapsed / 4);
+    // Update sparks
+    if (sparkRef.current) {
+      const posArray = sparkRef.current.geometry.attributes.position.array as Float32Array;
+
+      for (let i = 0; i < sparkCount; i++) {
+        posArray[i * 3] += sparkVelocities[i][0] * 0.016;
+        posArray[i * 3 + 1] += sparkVelocities[i][1] * 0.016;
+        posArray[i * 3 + 2] += sparkVelocities[i][2] * 0.016;
+
+        // Drag slows sparks quickly
+        sparkVelocities[i][0] *= 0.98;
+        sparkVelocities[i][1] -= 5 * 0.016;
+        sparkVelocities[i][2] *= 0.98;
+      }
+
+      sparkRef.current.geometry.attributes.position.needsUpdate = true;
+      const mat = sparkRef.current.material as THREE.PointsMaterial;
+      mat.opacity = Math.max(0, 1 - elapsed / 2);
     }
   });
 
@@ -113,53 +150,79 @@ export function Explosion({ position, impactVelocity = 50 }: ExplosionProps) {
     <group ref={groupRef} position={position}>
       {/* Main fireball */}
       <mesh ref={fireballRef}>
-        <sphereGeometry args={[1, 16, 16]} />
+        <icosahedronGeometry args={[1, 2]} />
         <meshBasicMaterial
-          color="#ff4400"
+          color="#ffffaa"
           transparent
-          opacity={1}
+          opacity={0.9}
           depthWrite={false}
         />
       </mesh>
 
-      {/* Inner bright core */}
-      <mesh ref={coreRef}>
-        <sphereGeometry args={[1, 16, 16]} />
+      {/* Shockwave ring */}
+      <mesh ref={shockwaveRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.5, 0]}>
+        <ringGeometry args={[0.8, 1, 64]} />
         <meshBasicMaterial
-          color="#ffff00"
+          color="#ffaa44"
           transparent
-          opacity={1}
+          opacity={0.6}
+          side={THREE.DoubleSide}
           depthWrite={false}
         />
       </mesh>
 
-      {/* Debris particles */}
-      <points ref={pointsRef}>
+      {/* Debris chunks */}
+      <points ref={debrisRef}>
         <bufferGeometry>
           <bufferAttribute
             attach="attributes-position"
-            args={[positions, 3]}
+            args={[debrisPositions, 3]}
           />
           <bufferAttribute
-            attach="attributes-color"
-            args={[colors, 3]}
+            attach="attributes-size"
+            args={[debrisSizes, 1]}
           />
         </bufferGeometry>
         <pointsMaterial
-          size={3}
+          size={4}
+          color="#332211"
           transparent
           opacity={1}
           sizeAttenuation
-          vertexColors
           depthWrite={false}
         />
       </points>
 
-      {/* Explosion light */}
+      {/* Sparks */}
+      <points ref={sparkRef}>
+        <bufferGeometry>
+          <bufferAttribute
+            attach="attributes-position"
+            args={[sparkPositions, 3]}
+          />
+        </bufferGeometry>
+        <pointsMaterial
+          size={2}
+          color="#ffcc00"
+          transparent
+          opacity={1}
+          sizeAttenuation
+          depthWrite={false}
+        />
+      </points>
+
+      {/* Explosion lights */}
       <pointLight
-        intensity={10 * explosionScale}
+        intensity={20 * explosionScale}
         color="#ff6600"
-        distance={500}
+        distance={300}
+        decay={2}
+      />
+      <pointLight
+        position={[0, 10, 0]}
+        intensity={10 * explosionScale}
+        color="#ffaa00"
+        distance={200}
         decay={2}
       />
     </group>

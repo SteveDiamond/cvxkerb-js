@@ -20,7 +20,7 @@ export interface PhysicsState {
 
 export function createInitialState(): PhysicsState {
   return {
-    position: [0, 0, 0],       // Start on ground
+    position: [0, 0, 25],      // Start on pad (z=25 because 50m rocket is centered)
     velocity: [0, 0, 0],
     thrust: [0, 0, 0],
     elapsedTime: 0,

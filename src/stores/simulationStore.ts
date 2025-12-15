@@ -181,7 +181,7 @@ export const useSimulationStore = create<SimulationState>((set) => ({
   // Launch state
   launchTime: -5,
   setLaunchTime: (time) => set({ launchTime: time }),
-  launchPosition: [0, 0, 5],
+  launchPosition: [0, 0, 25],
   launchVelocity: [0, 0, 0],
   launchThrust: 0,
   setLaunchState: (state) => set((prev) => ({
@@ -206,7 +206,7 @@ export const useSimulationStore = create<SimulationState>((set) => ({
       playbackTime: 0,
       errorMessage: null,
       launchTime: -5,
-      launchPosition: [0, 0, 5],
+      launchPosition: [0, 0, 25],
       launchVelocity: [0, 0, 0],
       launchThrust: 0,
       simplePhysics: createInitialState(),

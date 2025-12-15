@@ -8,8 +8,8 @@ const TERRAIN_CONFIG = {
   height: 3000,
   widthSegments: 256,
   heightSegments: 256,
-  verticalScale: 120,
-  flatCenterRadius: 45,
+  verticalScale: 100,     // Full Mars terrain detail
+  flatCenterRadius: 50,   // Just the landing pad is flat
 };
 
 export function MarsTerrain() {
@@ -131,7 +131,7 @@ export function MarsTerrain() {
 
       {/* Landing pad area */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.1, 0]} receiveShadow>
-        <circleGeometry args={[40, 64]} />
+        <circleGeometry args={[45, 64]} />
         <meshStandardMaterial
           color="#8b5a3c"
           roughness={0.9}

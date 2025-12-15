@@ -66,7 +66,8 @@ export function Scene() {
       ];
     } else {
       // Idle - rocket on pad (y is up in Three.js)
-      rocketPosition = [0, 5, 0];
+      // Rocket is 50m tall, centered, so Y=25 puts bottom at ground
+      rocketPosition = [0, 25, 0];
       rocketVelocity = [0, 0, 0];
       thrustVector = [0, 0, 0];
     }
@@ -95,8 +96,9 @@ export function Scene() {
       ? trajectory.thrusts[currentIndex]
       : [0, 0, 0];
   } else {
-    // Idle - rocket on pad
-    rocketPosition = [0, 0, 5];
+    // Idle - rocket on pad (y is up in Three.js)
+    // Rocket is 50m tall, centered, so Y=25 puts bottom at ground
+    rocketPosition = [0, 25, 0];
     rocketVelocity = [0, 0, 0];
     thrustVector = [0, 0, 0];
   }

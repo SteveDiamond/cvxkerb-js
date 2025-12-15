@@ -1,4 +1,20 @@
-# React + TypeScript + Vite
+# CVXKERB-JS
+
+Mars rocket landing simulation using G-FOLD (Guidance for Fuel-Optimal Large Diverts) algorithm with convex optimization.
+
+## Features
+- Real NASA MOLA Mars terrain heightmap
+- SpaceX Starship 3D model
+- G-FOLD powered descent guidance via cvxjs
+- Real-time physics simulation
+
+## Credits
+- **Starship 3D Model**: [Render Island](https://sketchfab.com/render.island) - [CC Attribution](https://sketchfab.com/3d-models/spacex-starship-83d9d7d5e9c54d768f0c2c99d5ad50aa)
+- **Mars Terrain Data**: NASA MOLA (Mars Orbiter Laser Altimeter)
+
+---
+
+# Development
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 

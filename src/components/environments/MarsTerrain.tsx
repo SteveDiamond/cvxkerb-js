@@ -1,105 +1,119 @@
-import { useMemo, useRef, useEffect } from 'react';
-import { useFrame } from '@react-three/fiber';
+import { useMemo, useEffect } from 'react';
+import { useTexture } from '@react-three/drei';
 import * as THREE from 'three';
-import {
-  generateMarsTerrainData,
-  applyHeightmapToGeometry,
-  loadHeightmapFromImage,
-  type TerrainConfig,
-} from '../../utils/terrainLoader';
 
 // Mars terrain configuration
-const TERRAIN_CONFIG: TerrainConfig = {
+const TERRAIN_CONFIG = {
   width: 3000,
   height: 3000,
   widthSegments: 256,
   heightSegments: 256,
-  verticalScale: 80, // Max elevation variation in meters
-  flatCenterRadius: 40, // Keep landing area flat
+  verticalScale: 120,
+  flatCenterRadius: 45,
 };
 
-// URL for NASA Mars heightmap (optional - uses procedural if not available)
-// You can replace this with a local file in public/terrain/mars_heightmap.png
-const HEIGHTMAP_URL = '/terrain/mars_heightmap.png';
-
 export function MarsTerrain() {
-  const dustRef = useRef<THREE.Points>(null);
+  // Load all Mars textures
+  const [colorTexture, topoTexture, bumpTexture] = useTexture([
+    '/terrain/2k_mars.jpg',
+    '/terrain/mars_1k_topo.jpg',
+    '/terrain/marsbump1k.jpg',
+  ]);
 
-  // Generate terrain geometry with realistic Mars-like features
+  // Create color texture - stretch across terrain (no tiling = no seams)
+  const marsColorMap = useMemo(() => {
+    const canvas = document.createElement('canvas');
+    const size = 2048;
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+
+    if (ctx && colorTexture.image) {
+      const img = colorTexture.image as HTMLImageElement;
+      // Use a larger region and stretch it (no tiling)
+      const sx = img.width * 0.1;
+      const sy = img.height * 0.25;
+      const sw = img.width * 0.5;
+      const sh = img.height * 0.5;
+      ctx.drawImage(img, sx, sy, sw, sh, 0, 0, size, size);
+    }
+
+    const texture = new THREE.CanvasTexture(canvas);
+    // NO tiling - stretch across entire terrain
+    texture.wrapS = texture.wrapT = THREE.ClampToEdgeWrapping;
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.needsUpdate = true;
+    return texture;
+  }, [colorTexture]);
+
+  // Bump map - also no tiling to avoid seams
+  const marsBumpMap = useMemo(() => {
+    bumpTexture.wrapS = bumpTexture.wrapT = THREE.ClampToEdgeWrapping;
+    return bumpTexture;
+  }, [bumpTexture]);
+
+  // Create terrain geometry
   const terrainGeometry = useMemo(() => {
-    const geo = new THREE.PlaneGeometry(
+    return new THREE.PlaneGeometry(
       TERRAIN_CONFIG.width,
       TERRAIN_CONFIG.height,
       TERRAIN_CONFIG.widthSegments,
       TERRAIN_CONFIG.heightSegments
     );
-
-    // Generate procedural Mars terrain using FBM noise
-    const heightData = generateMarsTerrainData(TERRAIN_CONFIG, 42);
-    applyHeightmapToGeometry(geo, heightData);
-
-    return geo;
   }, []);
 
-  // Try to load heightmap from file (for real NASA DEM data)
+  // Apply real MOLA heightmap data to terrain
   useEffect(() => {
-    loadHeightmapFromImage(HEIGHTMAP_URL, TERRAIN_CONFIG)
-      .then((heightData) => {
-        applyHeightmapToGeometry(terrainGeometry, heightData);
-        console.log('Loaded NASA Mars heightmap');
-      })
-      .catch(() => {
-        // Heightmap not available, using procedural terrain
-        console.log('Using procedural Mars terrain (heightmap not found)');
-      });
-  }, [terrainGeometry]);
+    if (!topoTexture.image || !terrainGeometry) return;
 
-  // Ambient dust particles floating
-  const dustParticles = useMemo(() => {
-    const count = 3000;
-    const positions = new Float32Array(count * 3);
-    const sizes = new Float32Array(count);
+    const img = topoTexture.image as HTMLImageElement;
+    const canvas = document.createElement('canvas');
+    canvas.width = TERRAIN_CONFIG.widthSegments + 1;
+    canvas.height = TERRAIN_CONFIG.heightSegments + 1;
+    const ctx = canvas.getContext('2d');
 
-    for (let i = 0; i < count; i++) {
-      const angle = Math.random() * Math.PI * 2;
-      const radius = 50 + Math.random() * 1000;
-      positions[i * 3] = Math.cos(angle) * radius;
-      positions[i * 3 + 1] = Math.sin(angle) * radius;
-      positions[i * 3 + 2] = Math.random() * 300 + 2;
-      sizes[i] = 0.5 + Math.random() * 2;
-    }
+    if (!ctx) return;
 
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geo.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
-    return geo;
-  }, []);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
-  // Animate floating dust with wind patterns
-  useFrame((state) => {
-    if (dustRef.current) {
-      const positions = dustRef.current.geometry.attributes.position.array as Float32Array;
-      const time = state.clock.elapsedTime;
+    const positions = terrainGeometry.attributes.position.array as Float32Array;
+    const vertexCount = positions.length / 3;
 
-      for (let i = 0; i < positions.length; i += 3) {
-        // Wind drift with varying speeds
-        const windSpeed = 0.02 + Math.sin(i * 0.1) * 0.015;
-        positions[i] += Math.sin(time * 0.15 + i * 0.5) * windSpeed;
-        positions[i + 1] += Math.cos(time * 0.12 + i * 0.3) * windSpeed;
-        positions[i + 2] += Math.sin(time * 0.2 + i * 0.2) * 0.01;
+    for (let i = 0; i < vertexCount; i++) {
+      const vx = positions[i * 3];
+      const vy = positions[i * 3 + 1];
+      const distFromCenter = Math.sqrt(vx * vx + vy * vy);
 
-        // Keep in bounds
-        if (positions[i + 2] > 350) positions[i + 2] = 2;
-        if (positions[i + 2] < 1) positions[i + 2] = 300;
+      const pixelIndex = i * 4;
+      const r = imageData.data[pixelIndex];
+      const g = imageData.data[pixelIndex + 1];
+      const b = imageData.data[pixelIndex + 2];
+      const gray = (r + g + b) / 3 / 255;
+
+      let height = (gray - 0.5) * 2 * TERRAIN_CONFIG.verticalScale;
+
+      // Keep center flat for landing pad
+      if (distFromCenter < TERRAIN_CONFIG.flatCenterRadius) {
+        height = 0;
+      } else if (distFromCenter < TERRAIN_CONFIG.flatCenterRadius * 2.5) {
+        const blend = (distFromCenter - TERRAIN_CONFIG.flatCenterRadius) /
+                      (TERRAIN_CONFIG.flatCenterRadius * 1.5);
+        const smoothBlend = blend * blend * (3 - 2 * blend);
+        height *= smoothBlend;
       }
 
-      dustRef.current.geometry.attributes.position.needsUpdate = true;
+      positions[i * 3 + 2] = height;
     }
-  });
+
+    terrainGeometry.attributes.position.needsUpdate = true;
+    terrainGeometry.computeVertexNormals();
+    console.log('Applied real MOLA Mars heightmap');
+  }, [topoTexture, terrainGeometry]);
 
   return (
     <group>
-      {/* Mars surface with realistic terrain */}
+      {/* Mars surface with real MOLA terrain */}
       <mesh
         rotation={[-Math.PI / 2, 0, 0]}
         position={[0, -1, 0]}
@@ -107,56 +121,26 @@ export function MarsTerrain() {
         receiveShadow
       >
         <meshStandardMaterial
-          color="#b5653d"
-          roughness={0.92}
-          metalness={0.08}
-          flatShading={false}
-        />
-      </mesh>
-
-      {/* Secondary detail layer for close-up visual interest */}
-      <mesh
-        rotation={[-Math.PI / 2, 0, 0]}
-        position={[0, -0.5, 0]}
-        receiveShadow
-      >
-        <planeGeometry args={[3000, 3000, 64, 64]} />
-        <meshStandardMaterial
-          color="#a85a35"
-          roughness={0.95}
+          map={marsColorMap}
+          bumpMap={marsBumpMap}
+          bumpScale={2}
+          roughness={0.88}
           metalness={0.05}
-          transparent
-          opacity={0.3}
-          depthWrite={false}
         />
       </mesh>
 
-      {/* Landing pad area - flattened and prepared */}
+      {/* Landing pad area */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.1, 0]} receiveShadow>
-        <circleGeometry args={[38, 64]} />
-        <meshStandardMaterial color="#9e5a3c" roughness={0.85} metalness={0.15} />
+        <circleGeometry args={[40, 64]} />
+        <meshStandardMaterial
+          color="#8b5a3c"
+          roughness={0.9}
+          metalness={0.1}
+        />
       </mesh>
 
       {/* Landing target markings */}
       <LandingTarget />
-
-      {/* Scattered rocks with better distribution */}
-      <Rocks />
-
-      {/* Distant mountains/ridges */}
-      <MarsRidges />
-
-      {/* Floating dust particles */}
-      <points ref={dustRef} geometry={dustParticles}>
-        <pointsMaterial
-          color="#d4a574"
-          size={1.8}
-          transparent
-          opacity={0.25}
-          sizeAttenuation
-          depthWrite={false}
-        />
-      </points>
 
       {/* Mars atmosphere and lighting */}
       <MarsAtmosphere />
@@ -203,10 +187,7 @@ function LandingTarget() {
       {[0, 90, 180, 270].map((angle) => {
         const rad = (angle * Math.PI) / 180;
         return (
-          <mesh
-            key={angle}
-            position={[Math.cos(rad) * 25, 0.6, Math.sin(rad) * 25]}
-          >
+          <mesh key={angle} position={[Math.cos(rad) * 25, 0.6, Math.sin(rad) * 25]}>
             <boxGeometry args={[2.5, 1.2, 2.5]} />
             <meshStandardMaterial
               color="#ff6600"
@@ -220,125 +201,10 @@ function LandingTarget() {
   );
 }
 
-function Rocks() {
-  const rocks = useMemo(() => {
-    const rockData: {
-      pos: [number, number, number];
-      scale: number;
-      rotation: [number, number, number];
-      type: number;
-    }[] = [];
-
-    // Generate rocks with clustered distribution (more realistic)
-    const clusterCenters = Array.from({ length: 20 }, () => ({
-      x: (Math.random() - 0.5) * 1400,
-      z: (Math.random() - 0.5) * 1400,
-    }));
-
-    for (let i = 0; i < 200; i++) {
-      // Pick a cluster or random position
-      const useCluster = Math.random() < 0.7;
-      let x: number, z: number;
-
-      if (useCluster) {
-        const cluster = clusterCenters[Math.floor(Math.random() * clusterCenters.length)];
-        x = cluster.x + (Math.random() - 0.5) * 150;
-        z = cluster.z + (Math.random() - 0.5) * 150;
-      } else {
-        const angle = Math.random() * Math.PI * 2;
-        const dist = 60 + Math.random() * 700;
-        x = Math.cos(angle) * dist;
-        z = Math.sin(angle) * dist;
-      }
-
-      // Skip if too close to landing pad
-      if (Math.sqrt(x * x + z * z) < 50) continue;
-
-      rockData.push({
-        pos: [x, 0, z],
-        scale: 0.3 + Math.random() * 3 + (Math.random() < 0.1 ? 5 : 0), // Some large boulders
-        rotation: [
-          Math.random() * 0.4 - 0.2,
-          Math.random() * Math.PI * 2,
-          Math.random() * 0.4 - 0.2,
-        ],
-        type: Math.floor(Math.random() * 3),
-      });
-    }
-
-    return rockData;
-  }, []);
-
-  return (
-    <group>
-      {rocks.map((rock, i) => (
-        <mesh
-          key={i}
-          position={[rock.pos[0], rock.scale * 0.35, rock.pos[2]]}
-          rotation={rock.rotation}
-          castShadow
-        >
-          {rock.type === 0 && <dodecahedronGeometry args={[rock.scale, 0]} />}
-          {rock.type === 1 && <icosahedronGeometry args={[rock.scale, 0]} />}
-          {rock.type === 2 && <octahedronGeometry args={[rock.scale, 0]} />}
-          <meshStandardMaterial
-            color={`hsl(${12 + Math.random() * 8}, ${25 + Math.random() * 15}%, ${22 + Math.random() * 12}%)`}
-            roughness={0.9 + Math.random() * 0.1}
-            metalness={0.02 + Math.random() * 0.05}
-          />
-        </mesh>
-      ))}
-    </group>
-  );
-}
-
-function MarsRidges() {
-  const ridges = useMemo(() => {
-    // Create distant mountain ridges/plateaus
-    return [
-      { pos: [900, 0, 700], scale: [400, 150, 300], rotation: 0.2 },
-      { pos: [-800, 0, 900], scale: [500, 200, 350], rotation: -0.3 },
-      { pos: [600, 0, -900], scale: [350, 130, 280], rotation: 0.4 },
-      { pos: [-1000, 0, -600], scale: [300, 100, 250], rotation: -0.1 },
-      { pos: [1100, 0, 100], scale: [450, 180, 320], rotation: 0.15 },
-      { pos: [-1200, 0, 300], scale: [550, 250, 400], rotation: -0.25 },
-      { pos: [200, 0, 1100], scale: [400, 170, 300], rotation: 0.1 },
-      { pos: [100, 0, -1100], scale: [380, 140, 290], rotation: -0.15 },
-    ];
-  }, []);
-
-  return (
-    <group>
-      {ridges.map((ridge, i) => (
-        <group key={i} position={[ridge.pos[0], ridge.scale[1] * 0.3, ridge.pos[2]]} rotation={[0, ridge.rotation, 0]}>
-          {/* Main ridge body */}
-          <mesh>
-            <boxGeometry args={[ridge.scale[0], ridge.scale[1], ridge.scale[2]]} />
-            <meshStandardMaterial
-              color="#7a3d1f"
-              roughness={0.95}
-              metalness={0.05}
-            />
-          </mesh>
-          {/* Erosion detail - smaller blocks on top */}
-          <mesh position={[(Math.random() - 0.5) * ridge.scale[0] * 0.4, ridge.scale[1] * 0.4, (Math.random() - 0.5) * ridge.scale[2] * 0.3]}>
-            <boxGeometry args={[ridge.scale[0] * 0.3, ridge.scale[1] * 0.3, ridge.scale[2] * 0.4]} />
-            <meshStandardMaterial
-              color="#8b4525"
-              roughness={0.95}
-              metalness={0.05}
-            />
-          </mesh>
-        </group>
-      ))}
-    </group>
-  );
-}
-
 function MarsAtmosphere() {
   return (
     <group>
-      {/* Main sunlight - Mars gets less light than Earth */}
+      {/* Main sunlight */}
       <directionalLight
         position={[400, 500, 300]}
         intensity={1.8}
@@ -353,26 +219,19 @@ function MarsAtmosphere() {
         shadow-camera-bottom={-800}
       />
 
-      {/* Ambient - reddish tint from dust scattering */}
+      {/* Ambient light with Mars dust tint */}
       <ambientLight intensity={0.4} color="#e8a878" />
 
-      {/* Fill light from atmosphere scatter */}
-      <hemisphereLight
-        color="#ffd4a8"
-        groundColor="#8b4513"
-        intensity={0.5}
-      />
+      {/* Hemisphere light for atmosphere scatter */}
+      <hemisphereLight color="#ffd4a8" groundColor="#8b4513" intensity={0.5} />
 
-      {/* Mars sky dome - butterscotch/salmon color */}
+      {/* Mars sky dome */}
       <mesh>
         <sphereGeometry args={[2800, 64, 64]} />
-        <meshBasicMaterial
-          color="#c9956c"
-          side={THREE.BackSide}
-        />
+        <meshBasicMaterial color="#c9956c" side={THREE.BackSide} />
       </mesh>
 
-      {/* Dust haze / fog */}
+      {/* Dust haze */}
       <fog attach="fog" args={['#c9956c', 500, 2500]} />
     </group>
   );

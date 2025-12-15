@@ -8,6 +8,7 @@ import { useCameraStore } from '../stores/cameraStore';
 import { EnvironmentManager } from './environments/EnvironmentManager';
 import { CameraController } from './camera/CameraController';
 import { LandingDust } from './effects/LandingDust';
+import { Explosion } from './effects/Explosion';
 
 export function Scene() {
   const {
@@ -21,6 +22,10 @@ export function Scene() {
     launchPosition,
     launchVelocity,
     launchThrust,
+    // Simple physics mode
+    simulationMode,
+    simplePhysics,
+    simpleConfig,
   } = useSimulationStore();
   const { activeCamera } = useCameraStore();
 
@@ -37,15 +42,43 @@ export function Scene() {
   let rocketVelocity: [number, number, number];
   let thrustVector: [number, number, number];
 
-  if (status === 'launching') {
-    // Use launch state
+  // Simple physics mode
+  // Physics uses [x, y, z] where z = altitude
+  // Three.js uses [x, y, z] where y = up
+  // So we need to swap y and z for rendering
+  if (simulationMode === 'simple') {
+    if (status === 'simpleRunning' || status === 'crashed' || status === 'landed') {
+      // Swap: physics z (altitude) -> Three.js y (up)
+      rocketPosition = [
+        simplePhysics.position[0],
+        simplePhysics.position[2],  // z -> y
+        simplePhysics.position[1],  // y -> z
+      ];
+      rocketVelocity = [
+        simplePhysics.velocity[0],
+        simplePhysics.velocity[2],
+        simplePhysics.velocity[1],
+      ];
+      thrustVector = [
+        simplePhysics.thrust[0],
+        simplePhysics.thrust[2],
+        simplePhysics.thrust[1],
+      ];
+    } else {
+      // Idle - rocket on pad (y is up in Three.js)
+      rocketPosition = [0, 5, 0];
+      rocketVelocity = [0, 0, 0];
+      thrustVector = [0, 0, 0];
+    }
+  } else if (status === 'launching') {
+    // Use launch state (G-FOLD mode)
     rocketPosition = launchPosition;
     rocketVelocity = launchVelocity;
     // During launch, thrust is upward (with some pitch)
     const thrustMag = launchThrust * params.F_max;
     thrustVector = [thrustMag * 0.1, 0, thrustMag * 0.95];
   } else if (trajectory && trajectory.positions.length > 0) {
-    // Use trajectory playback
+    // Use trajectory playback (G-FOLD mode)
     const p1 = trajectory.positions[currentIndex];
     const p2 = trajectory.positions[nextIndex];
     rocketPosition = [
@@ -98,8 +131,20 @@ export function Scene() {
       <LandingDust
         rocketPosition={rocketPosition}
         thrustMagnitude={Math.sqrt(thrustVector[0] ** 2 + thrustVector[1] ** 2 + thrustVector[2] ** 2)}
-        maxThrust={params.F_max}
+        maxThrust={simulationMode === 'simple' ? simpleConfig.maxThrust : params.F_max}
       />
+
+      {/* Explosion effect when crashed */}
+      {status === 'crashed' && (
+        <Explosion
+          position={[
+            simplePhysics.position[0],
+            simplePhysics.position[2],  // z -> y for Three.js
+            simplePhysics.position[1],
+          ]}
+          impactVelocity={Math.abs(simplePhysics.velocity[2])}
+        />
+      )}
 
       {/* Visualization overlays */}
       {showTrajectory && trajectory && (

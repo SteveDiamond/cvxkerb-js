@@ -4,9 +4,11 @@ import { Scene } from './components/Scene';
 import { ControlPanel } from './ui/ControlPanel';
 import { Telemetry } from './ui/Telemetry';
 import { CameraSwitcher } from './ui/CameraSwitcher';
+import { MarsLocationOverlay } from './ui/MarsLocationOverlay';
 import { useSimulationStore } from './stores/simulationStore';
 import { useCameraStore, type CameraMode } from './stores/cameraStore';
 import { solveLanding } from './simulation/GFoldSolver';
+import { stepPhysics } from './simulation/PhysicsEngine';
 
 function App() {
   const {
@@ -24,6 +26,10 @@ function App() {
     setLaunchState,
     setTrajectory,
     setErrorMessage,
+    // Simple physics mode
+    simulationMode,
+    simplePhysics,
+    setSimplePhysics,
   } = useSimulationStore();
 
   const { startTransition } = useCameraStore();
@@ -183,8 +189,48 @@ function App() {
     };
   }, [status, playbackTime, playbackSpeed, trajectory, setPlaybackTime, setStatus]);
 
+  // Simple physics animation loop
+  useEffect(() => {
+    if (status !== 'simpleRunning') return;
+
+    let animationId: number;
+
+    const animate = (currentTime: number) => {
+      if (lastTimeRef.current === 0) {
+        lastTimeRef.current = currentTime;
+      }
+
+      const deltaTime = Math.min((currentTime - lastTimeRef.current) / 1000, 0.1);
+      lastTimeRef.current = currentTime;
+
+      // Get latest state from store to avoid stale closure
+      const currentPhysics = useSimulationStore.getState().simplePhysics;
+      const currentConfig = useSimulationStore.getState().simpleConfig;
+
+      const newPhysics = stepPhysics(currentPhysics, currentConfig, deltaTime, 0);
+      setSimplePhysics(newPhysics);
+
+      if (newPhysics.hasCrashed) {
+        setStatus('crashed');
+      } else if (newPhysics.hasLandedSafely) {
+        setStatus('landed');
+      } else {
+        animationId = requestAnimationFrame(animate);
+      }
+    };
+
+    animationId = requestAnimationFrame(animate);
+
+    return () => {
+      cancelAnimationFrame(animationId);
+      lastTimeRef.current = 0;
+    };
+  }, [status, setSimplePhysics, setStatus]);
+
   // Get display time for mission clock
-  const displayTime = status === 'launching' ? launchTime : playbackTime + (trajectory ? 35 : 0);
+  const displayTime = simulationMode === 'simple'
+    ? simplePhysics.elapsedTime
+    : status === 'launching' ? launchTime : playbackTime + (trajectory ? 35 : 0);
 
   return (
     <div className="w-full h-full bg-[#050608] hex-grid scanlines relative">
@@ -206,6 +252,7 @@ function App() {
       <ControlPanel />
       <Telemetry />
       <CameraSwitcher />
+      <MarsLocationOverlay />
 
       {/* Title Header */}
       <div className="absolute top-4 right-4 text-right">
@@ -220,10 +267,12 @@ function App() {
           </h1>
           <div className="h-px bg-gradient-to-r from-transparent via-amber-500/30 to-transparent my-2" />
           <p className="text-[10px] text-amber-500/50 tracking-[0.2em] uppercase">
-            Mars Powered Descent
+            {simulationMode === 'simple' ? 'Newtonian Physics' : 'Mars Powered Descent'}
           </p>
           <p className="text-[9px] text-cyan-500/40 mt-1 tracking-wider">
-            G-FOLD via <span className="text-cyan-500/60">cvxjs</span>
+            {simulationMode === 'simple'
+              ? 'Simple rocket simulation'
+              : <>G-FOLD via <span className="text-cyan-500/60">cvxjs</span></>}
           </p>
         </div>
       </div>
@@ -246,6 +295,23 @@ function App() {
           <div className="mission-panel rounded px-4 py-1">
             <span className="text-xs text-cyan-400 uppercase tracking-wider">
               {launchTime < 0 ? 'Countdown' : launchTime < 30 ? 'Ascent' : 'MECO'}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Simple physics phase indicator */}
+      {(status === 'simpleRunning' || status === 'crashed' || status === 'landed') && simulationMode === 'simple' && (
+        <div className="absolute top-20 left-1/2 -translate-x-1/2">
+          <div className="mission-panel rounded px-4 py-1">
+            <span className={`text-xs uppercase tracking-wider ${
+              status === 'crashed' ? 'text-red-400' :
+              status === 'landed' ? 'text-green-400' :
+              simplePhysics.isEngineOn ? 'text-orange-400' : 'text-cyan-400'
+            }`}>
+              {status === 'crashed' ? 'CRASH!' :
+               status === 'landed' ? 'LANDED!' :
+               simplePhysics.isEngineOn ? 'Engine Burn' : 'Freefall'}
             </span>
           </div>
         </div>

@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { type PhysicsState, type PhysicsConfig, createInitialState } from '../simulation/PhysicsEngine';
 
 export interface LandingParams {
   K: number;         // Number of time steps
@@ -20,7 +21,9 @@ export interface TrajectoryData {
   fuelUsed: number;
 }
 
-export type SimulationStatus = 'idle' | 'solving' | 'ready' | 'playing' | 'paused' | 'error' | 'launching';
+export type SimulationStatus = 'idle' | 'solving' | 'ready' | 'playing' | 'paused' | 'error' | 'launching' | 'simpleRunning' | 'crashed' | 'landed';
+
+export type SimulationMode = 'gfold' | 'simple';
 
 export interface Scenario {
   name: string;
@@ -76,7 +79,17 @@ export const scenarios: Scenario[] = [
 ];
 
 interface SimulationState {
-  // Parameters
+  // Simulation mode
+  simulationMode: SimulationMode;
+  setSimulationMode: (mode: SimulationMode) => void;
+
+  // Simple physics state
+  simpleConfig: PhysicsConfig;
+  setSimpleConfig: (config: Partial<PhysicsConfig>) => void;
+  simplePhysics: PhysicsState;
+  setSimplePhysics: (state: PhysicsState) => void;
+
+  // Parameters (G-FOLD)
   params: LandingParams;
   setParams: (params: Partial<LandingParams>) => void;
   loadScenario: (scenario: Scenario) => void;
@@ -123,8 +136,26 @@ interface SimulationState {
 
 const defaultParams = scenarios[0].params;
 
+const defaultSimpleConfig: PhysicsConfig = {
+  gravity: 3.72,        // Mars
+  mass: 25000,          // kg
+  maxThrust: 800000,    // N
+  burnDuration: 10,     // seconds
+};
+
 export const useSimulationStore = create<SimulationState>((set) => ({
-  // Parameters
+  // Simulation mode
+  simulationMode: 'simple',
+  setSimulationMode: (mode) => set({ simulationMode: mode, status: 'idle' }),
+
+  // Simple physics state
+  simpleConfig: defaultSimpleConfig,
+  setSimpleConfig: (newConfig) =>
+    set((state) => ({ simpleConfig: { ...state.simpleConfig, ...newConfig } })),
+  simplePhysics: createInitialState(),
+  setSimplePhysics: (state) => set({ simplePhysics: state }),
+
+  // Parameters (G-FOLD)
   params: defaultParams,
   setParams: (newParams) =>
     set((state) => ({ params: { ...state.params, ...newParams } })),
@@ -178,5 +209,6 @@ export const useSimulationStore = create<SimulationState>((set) => ({
       launchPosition: [0, 0, 5],
       launchVelocity: [0, 0, 0],
       launchThrust: 0,
+      simplePhysics: createInitialState(),
     }),
 }));

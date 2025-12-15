@@ -34,12 +34,26 @@ export function CameraController({
     switch (mode) {
       case 'chase': {
         // Behind and above the rocket, looking at it
-        const offset = new THREE.Vector3(0, 80, -200);
-        // Rotate offset based on velocity direction (for more dynamic chase)
+        // Three.js: y is up, x/z are horizontal
+        const behindDistance = 150;
+        const aboveDistance = 80;
+
+        // Position camera behind (in x/z plane) and above (in y)
+        let offset = new THREE.Vector3(-behindDistance, aboveDistance, 0);
+
+        // Rotate offset based on velocity direction for dynamic chase
         if (velocity.length() > 1) {
-          const dir = velocity.clone().normalize();
-          offset.applyAxisAngle(new THREE.Vector3(0, 1, 0), Math.atan2(dir.x, dir.z));
+          const horizontalVel = new THREE.Vector2(velocity.x, velocity.z);
+          if (horizontalVel.length() > 0.1) {
+            const angle = Math.atan2(velocity.z, velocity.x);
+            offset = new THREE.Vector3(
+              -behindDistance * Math.cos(angle),
+              aboveDistance,
+              -behindDistance * Math.sin(angle)
+            );
+          }
         }
+
         return {
           position: rocketPos.clone().add(offset),
           lookAt: rocketPos.clone(),
